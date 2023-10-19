@@ -34,8 +34,8 @@ func main() {
 
 func checkErr(err error) {
 
-    if err != nil {
+	if err != nil {
 
-        panic(err)
-    }
+		panic(err)
+	}
 }
