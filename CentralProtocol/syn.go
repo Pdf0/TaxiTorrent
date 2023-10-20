@@ -1,10 +1,10 @@
 package CentralProtocol
 
 type SYN struct {
-	username string
-	addr    int64
-	port int
-	nFicheiros int
+	Username string
+	Addr    int64
+	Port int
+	NFicheiros int
 	//struct de ficheiros em chunks
 }
 

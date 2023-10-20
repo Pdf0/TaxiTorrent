@@ -38,13 +38,15 @@ func main() {
 }
 
 func processClient(connection net.Conn) {
-	s := TaxiTorrent.SYN{}
+
+	s := new(CentralProtocol.SYN)
 	buffer := make([]byte, 1024)
 	mLen, err := connection.Read(buffer)
 	if err != nil {
 		fmt.Println("Error reading:", err.Error())
 	}
-	fmt.Println("Received: ", DecodeToStruct(buffer[:mLen], s))
+	util.DecodeToStruct(buffer[:mLen], s)
+	fmt.Println("Received: ", *s)
 	_, err = connection.Write([]byte("Thanks! Got your message:" + string(buffer[:mLen])))
 	connection.Close()
 
