@@ -1,6 +1,8 @@
 package main
 
 import (
+	"TaxiTorrent/CentralProtocol"
+	"TaxiTorrent/util"
 	"fmt"
 	"net"
 )
@@ -10,11 +12,6 @@ const (
 	SERVER_PORT = "10000"
 	SERVER_TYPE = "tcp"
 )
-
-type CentralProtocol struct {
-	addr    int64
-	payload []byte
-}
 
 func main() {
 
@@ -41,12 +38,13 @@ func main() {
 }
 
 func processClient(connection net.Conn) {
+	s := TaxiTorrent.SYN{}
 	buffer := make([]byte, 1024)
 	mLen, err := connection.Read(buffer)
 	if err != nil {
 		fmt.Println("Error reading:", err.Error())
 	}
-	fmt.Println("Received: ", string(buffer[:mLen]))
+	fmt.Println("Received: ", DecodeToStruct(buffer[:mLen], s))
 	_, err = connection.Write([]byte("Thanks! Got your message:" + string(buffer[:mLen])))
 	connection.Close()
 

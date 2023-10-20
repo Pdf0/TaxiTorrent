@@ -1,7 +1,8 @@
 package main
 
 import (
-	"fmt"
+	"TaxiTorrent/CentralProtocol"
+	"TaxiTorrent/util"
 	"net"
 )
 
@@ -14,22 +15,35 @@ const (
 )
 
 func main() {
+	/*
+		var buffer string
 
-	var buffer string
+			for {
+				fmt.Scanln(&buffer)
 
-	for {
-		fmt.Scanln(&buffer)
+				con, err := net.Dial("tcp", SERVER_HOST+":"+SERVER_PORT)
 
-		con, err := net.Dial("tcp", SERVER_HOST+":"+SERVER_PORT)
+				checkErr(err)
 
-		checkErr(err)
+				defer con.Close()
 
-		defer con.Close()
+				_, err = con.Write([]byte(buffer))
 
-		_, err = con.Write([]byte(buffer))
+				checkErr(err)
+			}
+	*/
 
-		checkErr(err)
-	}
+	syn := CentralProtocol.CreateSyn("gato", 2, 22, 20)
+
+	con, err := net.Dial("tcp", SERVER_HOST+":"+SERVER_PORT)
+
+	checkErr(err)
+
+	defer con.Close()
+
+	_, err = con.Write(util.EncodeToBytes(syn))
+
+	checkErr(err)
 }
 
 func checkErr(err error) {
