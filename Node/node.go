@@ -33,7 +33,7 @@ func main() {
 			}
 	*/
 
-	syn := CentralProtocol.CreateSyn("gato", 2, 22, 20)
+	syn := CentralProtocol.CreateSyn("gato", 2, 22, 20, []CentralProtocol.File{{Name: "Pedro", Size: 3}})
 
 	con, err := net.Dial("tcp", SERVER_HOST+":"+SERVER_PORT)
 
