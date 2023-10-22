@@ -23,7 +23,7 @@ lint:
 	@echo ---
 	golint Node/node.go
 	@echo Linting Done!
-
+  
 format:
 	@$(GOCMD) fmt Node/node.go
 	@$(GOCMD) fmt Tracker/tracker.go
