@@ -22,3 +22,6 @@ go.work
 
 # Directories with compiled content
 bin
+
+# Seeds Directory
+seeds

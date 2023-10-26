@@ -3,6 +3,7 @@ package main
 import (
 	"TaxiTorrent/CentralProtocol"
 	"TaxiTorrent/util"
+	"fmt"
 	"net"
 )
 
@@ -15,35 +16,24 @@ const (
 )
 
 func main() {
-	/*
-		var buffer string
+	conn := connectToTracker()
 
-			for {
-				fmt.Scanln(&buffer)
+	defer conn.Close()
 
-				con, err := net.Dial("tcp", SERVER_HOST+":"+SERVER_PORT)
+	syn := CreateSyn(conn)
 
-				checkErr(err)
+	_, err := conn.Write(util.EncodeToBytes(syn))
 
-				defer con.Close()
+	checkErr(err)
+}
 
-				_, err = con.Write([]byte(buffer))
+func connectToTracker() net.Conn {
 
-				checkErr(err)
-			}
-	*/
-
-	syn := CentralProtocol.CreateSyn("gato", 2, 22, 20, []CentralProtocol.File{{Name: "Pedro", Size: 3}})
-
-	con, err := net.Dial("tcp", SERVER_HOST+":"+SERVER_PORT)
+	conn, err := net.Dial(CLIENT_TYPE, SERVER_HOST+":"+SERVER_PORT)
 
 	checkErr(err)
 
-	defer con.Close()
-
-	_, err = con.Write(util.EncodeToBytes(syn))
-
-	checkErr(err)
+	return conn
 }
 
 func checkErr(err error) {
@@ -52,4 +42,17 @@ func checkErr(err error) {
 
 		panic(err)
 	}
+}
+
+func CreateSyn(conn net.Conn) CentralProtocol.SYN {
+
+	dirPath := "Node/"
+	var tmp string
+	fmt.Print("Seeds Directory: ")
+	fmt.Scanf("%s", &tmp)
+	dirPath = dirPath + tmp
+	name, ip, port, nFiles, files := CentralProtocol.GetSYNInfo(conn, dirPath)
+	syn := CentralProtocol.CreateSyn(name, ip, port, nFiles, files)
+
+	return syn
 }

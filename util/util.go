@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/gob"
+    "net"
 )
 
 func EncodeToBytes(i interface{}) []byte {
@@ -47,4 +48,12 @@ func DecodeToStruct(s []byte, i interface{}) error {
         return err
     }
     return nil
+}
+
+func GetTCPIP(conn net.Conn) net.IP {
+    return conn.LocalAddr().(*net.TCPAddr).IP
+}
+
+func GetTCPPort(conn net.Conn) uint {
+    return uint(conn.LocalAddr().(*net.TCPAddr).Port)
 }
