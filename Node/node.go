@@ -16,11 +16,14 @@ const (
 )
 
 func main() {
-	conn := connectToTracker()
 
+	dirPath := GetDirPath()
+	username := GetUsername()
+
+	conn := connectToTracker()
 	defer conn.Close()
 
-	syn := CreateSyn(conn)
+	syn := CreateSyn(conn, dirPath, username)
 
 	_, err := conn.Write(util.EncodeToBytes(syn))
 
@@ -44,15 +47,26 @@ func checkErr(err error) {
 	}
 }
 
-func CreateSyn(conn net.Conn) CentralProtocol.SYN {
+func CreateSyn(conn net.Conn, dirPath string, username string) CentralProtocol.SYN {
 
-	dirPath := "Node/"
-	var tmp string
-	fmt.Print("Seeds Directory: ")
-	fmt.Scanf("%s", &tmp)
-	dirPath = dirPath + tmp
-	name, ip, port, nFiles, files := CentralProtocol.GetSYNInfo(conn, dirPath)
-	syn := CentralProtocol.CreateSyn(name, ip, port, nFiles, files)
+	ip, port, nFiles, files := CentralProtocol.GetSYNInfo(conn, dirPath)
+	syn := CentralProtocol.CreateSyn(username, ip, port, nFiles, files)
 
 	return syn
+}
+
+func GetDirPath() string {
+	var path string
+	fmt.Print("Seeds Directory: ")
+	fmt.Scanf("%s", &path)
+
+	return "Node/" + path
+}
+
+func GetUsername() string {
+	var username string
+	fmt.Print("Username: ")
+	fmt.Scanf("%s", &username)
+
+	return username
 }
