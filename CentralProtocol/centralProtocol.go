@@ -2,7 +2,6 @@ package CentralProtocol
 
 import (
 	"TaxiTorrent/util"
-	"fmt"
 	"log"
 	"net"
 	"os"
@@ -40,11 +39,7 @@ func ReceiveSYN (syn SYN) bool {
 	return true
 }
 
-func GetSYNInfo (conn net.Conn, dirPath string) (string, net.IP, uint, int, []File){
-	var name string
-	
-	fmt.Print("Username: ")
-	fmt.Scanf("%s", &name)
+func GetSYNInfo (conn net.Conn, dirPath string) (net.IP, uint, int, []File){
 	ip := util.GetTCPIP(conn)
 	port := util.GetTCPPort(conn)
 
@@ -75,5 +70,5 @@ func GetSYNInfo (conn net.Conn, dirPath string) (string, net.IP, uint, int, []Fi
 		fileCount++
 	}
 
-	return name, ip, port, fileCount, filesArray
+	return ip, port, fileCount, filesArray
 }
