@@ -40,19 +40,28 @@ func main() {
 }
 
 func processClient(connection net.Conn, dataBase map[string][]CentralProtocol.File) {
+	defer connection.Close()
 
-	s := new(CentralProtocol.SYN)
-	buffer := make([]byte, 1024)
-	mLen, err := connection.Read(buffer)
-	if err != nil {
-		fmt.Println("Error reading:", err.Error())
+	for {
+		buffer := make([]byte, 1024)
+		mLen, err := connection.Read(buffer)
+
+		if err != nil {
+			fmt.Println("Error reading:", err.Error())
+		}
+
+		if mLen == 0 {
+			break
+		}
+
+		s := new(CentralProtocol.SYN)
+		util.DecodeToStruct(buffer[:mLen], s)
+
+		fullAddr := net.JoinHostPort(s.Ip.String(), fmt.Sprintf("%d", s.Port))
+		dataBase[fullAddr] = s.FileList
+
+		fmt.Println("Received: ", *s)
+		fmt.Println(dataBase)
+		_, err = connection.Write([]byte("Thanks! Got your message:" + string(buffer[:mLen])))
 	}
-	util.DecodeToStruct(buffer[:mLen], s)
-	fullAddr := net.JoinHostPort(s.Ip.String(), fmt.Sprintf("%d", s.Port))
-	dataBase[fullAddr] = s.FileList
-	fmt.Println("Received: ", *s)
-	fmt.Println(dataBase)
-	_, err = connection.Write([]byte("Thanks! Got your message:" + string(buffer[:mLen])))
-	connection.Close()
-
 }
