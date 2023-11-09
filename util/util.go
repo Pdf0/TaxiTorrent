@@ -57,3 +57,12 @@ func GetTCPIP(conn net.Conn) net.IP {
 func GetTCPPort(conn net.Conn) uint {
     return uint(conn.LocalAddr().(*net.TCPAddr).Port)
 }
+
+func Contains(slice []string, value string) bool {
+	for _, v := range slice {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}

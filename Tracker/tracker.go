@@ -15,7 +15,7 @@ const (
 
 func main() {
 
-	dataBase := make(map[string][]CentralProtocol.File)
+	dataBase := make(map[CentralProtocol.File][]string)
 
 	fmt.Println("Server Running...")
 	server, err := net.Listen(SERVER_TYPE, SERVER_HOST+":"+SERVER_PORT)
@@ -39,7 +39,7 @@ func main() {
 
 }
 
-func processClient(connection net.Conn, dataBase map[string][]CentralProtocol.File) {
+func processClient(connection net.Conn, dataBase map[CentralProtocol.File][]string) {
 	defer connection.Close()
 
 	for {
@@ -58,10 +58,16 @@ func processClient(connection net.Conn, dataBase map[string][]CentralProtocol.Fi
 		util.DecodeToStruct(buffer[:mLen], s)
 
 		fullAddr := net.JoinHostPort(s.Ip.String(), fmt.Sprintf("%d", s.Port))
-		dataBase[fullAddr] = s.FileList
-
+		for _, file := range s.FileList {
+			if _, ok := dataBase[file]; !ok {
+				dataBase[file] = []string{fullAddr}
+			} else {
+				if !util.Contains(dataBase[file], fullAddr) {
+					dataBase[file] = append(dataBase[file], fullAddr)
+				}
+			}
+		}
 		fmt.Println("Received: ", *s)
 		fmt.Println(dataBase)
-		_, err = connection.Write([]byte("Thanks! Got your message:" + string(buffer[:mLen])))
 	}
 }
