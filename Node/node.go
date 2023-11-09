@@ -87,10 +87,29 @@ func GetInitialInfo() (string, string) {
 
 func GetDirPath() string {
 	var path string
-	fmt.Print("Seeds Directory: ")
-	fmt.Scanf("%s", &path)
+	err := false
+
+	for !err {
+
+		fmt.Print("Seeds Directory: ")
+		fmt.Scanf("%s", &path)
+
+		err = DirExists("Node/" + path)
+
+	}
 
 	return "Node/" + path
+}
+
+func DirExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	return false
 }
 
 func GetUsername() string {
