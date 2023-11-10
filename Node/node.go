@@ -27,6 +27,7 @@ func main() {
 
 	clear()
 	fmt.Println("Welcome to TaxiTorrent")
+  
 	for {
 		command := commandLine()
 
@@ -45,7 +46,6 @@ func main() {
 			os.Exit(0)
 		}
 	}
-
 }
 
 func connectToTracker() net.Conn {

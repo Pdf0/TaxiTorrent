@@ -8,11 +8,16 @@ import (
 )
 
 type SYN struct {
-	Username string
-	Ip    net.IP
-	Port uint
+	Username   string
+	Ip         net.IP
+	Port       uint
 	NFicheiros int
-	FileList[] File
+	FileList   []File
+}
+
+type Central struct {
+	PacketType string
+	Payload    []byte
 }
 
 type File struct {
@@ -20,12 +25,15 @@ type File struct {
 	Size int64 // in bytes
 }
 
-type ACK struct {
-	Error error
+func CreateCentral(packetType string, payload []byte) Central {
+	return Central{
+		packetType,
+		payload,
+	}
 }
 
-func CreateSyn (user string, addr net.IP,
-			port uint, nFicheiros int, fileList []File) SYN {
+func CreateSyn(user string, addr net.IP,
+	port uint, nFicheiros int, fileList []File) SYN {
 	return SYN{
 		user,
 		addr,
@@ -35,11 +43,11 @@ func CreateSyn (user string, addr net.IP,
 	}
 }
 
-func ReceiveSYN (syn SYN) bool {
+func ReceiveSYN(syn SYN) bool {
 	return true
 }
 
-func GetSYNInfo (conn net.Conn, dirPath string) (net.IP, uint, int, []File){
+func GetSYNInfo(conn net.Conn, dirPath string) (net.IP, uint, int, []File) {
 	ip := util.GetTCPIP(conn)
 	port := util.GetTCPPort(conn)
 
@@ -62,7 +70,7 @@ func GetSYNInfo (conn net.Conn, dirPath string) (net.IP, uint, int, []File){
 		if file.IsDir() {
 			continue
 		}
-		fileInfo, _  := file.Info()
+		fileInfo, _ := file.Info()
 		filesArray[fileCount] = File{
 			Name: file.Name(),
 			Size: fileInfo.Size(),
