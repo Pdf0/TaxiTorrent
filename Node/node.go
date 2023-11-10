@@ -18,18 +18,34 @@ const (
 
 func main() {
 
-	dirPath := GetDirPath()
-	username := GetUsername()
+	dirPath, username := GetInitialInfo()
 
 	conn := connectToTracker()
 	defer conn.Close()
 
-	syn := CreateSyn(conn, dirPath, username)
-	central := CentralProtocol.CreateCentral("syn", util.EncodeToBytes(syn))
+	SendSyn(conn, dirPath, username)
 
-	_, err := conn.Write(util.EncodeToBytes(central))
+	clear()
+	fmt.Println("Welcome to TaxiTorrent")
+  
+	for {
+		command := commandLine()
 
-	checkErr(err)
+		switch command {
+		case "help":
+			fmt.Println(" Available commands:\n  help - displays this help menu\n  get - get a file. \n  update - updates your available seeds.\n  clear - clears the screen\n  exit - exits the program")
+		case "get":
+			var file string
+			fmt.Print("File: ")
+			fmt.Scanf("%s", &file)
+		case "update":
+			SendSyn(conn, dirPath, username)
+		case "clear":
+			clear()
+		case "exit":
+			os.Exit(0)
+		}
+	}
 }
 
 func connectToTracker() net.Conn {
@@ -49,12 +65,24 @@ func checkErr(err error) {
 	}
 }
 
+func SendSyn(conn net.Conn, dirPath string, username string) {
+	syn := CreateSyn(conn, dirPath, username)
+
+	_, err := conn.Write(util.EncodeToBytes(syn))
+	checkErr(err)
+}
+
 func CreateSyn(conn net.Conn, dirPath string, username string) CentralProtocol.SYN {
 
 	ip, port, nFiles, files := CentralProtocol.GetSYNInfo(conn, dirPath)
 	syn := CentralProtocol.CreateSyn(username, ip, port, nFiles, files)
 
 	return syn
+}
+
+func GetInitialInfo() (string, string) {
+
+	return GetDirPath(), GetUsername()
 }
 
 func GetDirPath() string {
