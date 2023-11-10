@@ -25,8 +25,9 @@ func main() {
 	defer conn.Close()
 
 	syn := CreateSyn(conn, dirPath, username)
+	central := CentralProtocol.CreateCentral("syn", util.EncodeToBytes(syn))
 
-	_, err := conn.Write(util.EncodeToBytes(syn))
+	_, err := conn.Write(util.EncodeToBytes(central))
 
 	checkErr(err)
 }
