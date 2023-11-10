@@ -1,12 +1,13 @@
 package util
 
 import (
-	"log"
-	"io"
 	"bytes"
 	"compress/gzip"
 	"encoding/gob"
-    "net"
+	"fmt"
+	"io"
+	"log"
+	"net"
 )
 
 func EncodeToBytes(i interface{}) []byte {
@@ -43,8 +44,8 @@ func Decompress(s []byte) []byte {
 func DecodeToStruct(s []byte, i interface{}) error {
     dec := gob.NewDecoder(bytes.NewReader(Decompress(s)))
     err := dec.Decode(i)
-    if err != nil {
-        log.Fatal(err)
+    if err != nil && err != io.EOF {
+        fmt.Println("Error decoding:", err.Error())
         return err
     }
     return nil

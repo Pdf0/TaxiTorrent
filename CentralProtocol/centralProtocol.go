@@ -25,12 +25,19 @@ type File struct {
 	Size int64 // in bytes
 }
 
+func FillCentral(central Central, packetType string, payload []byte) {
+	central.PacketType = packetType
+	central.Payload = payload
+}
+
 func CreateCentral(packetType string, payload []byte) Central {
 	return Central{
 		packetType,
 		payload,
 	}
 }
+
+func CreateEmptyCentral() Central {return Central{}}
 
 func CreateSyn(user string, addr net.IP,
 	port uint, nFicheiros int, fileList []File) SYN {

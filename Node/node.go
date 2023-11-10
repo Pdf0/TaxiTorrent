@@ -16,18 +16,21 @@ const (
 	SERVER_PORT = "10000"
 )
 
+var SEEDSDIR string
+var USERNAME string
+
 func main() {
 
-	dirPath, username := GetInitialInfo()
+	SEEDSDIR, USERNAME = GetInitialInfo()
 
 	conn := connectToTracker()
 	defer conn.Close()
 
-	SendSyn(conn, dirPath, username)
+	SendCentral(conn, "syn")
 
 	clear()
 	fmt.Println("Welcome to TaxiTorrent")
-  
+
 	for {
 		command := commandLine()
 
@@ -39,7 +42,7 @@ func main() {
 			fmt.Print("File: ")
 			fmt.Scanf("%s", &file)
 		case "update":
-			SendSyn(conn, dirPath, username)
+			SendCentral(conn, "syn")
 		case "clear":
 			clear()
 		case "exit":
@@ -65,11 +68,15 @@ func checkErr(err error) {
 	}
 }
 
-func SendSyn(conn net.Conn, dirPath string, username string) {
-	syn := CreateSyn(conn, dirPath, username)
+// Função muito javarda mas assim funciona
+func SendCentral(conn net.Conn, packetType string) {
 
-	_, err := conn.Write(util.EncodeToBytes(syn))
-	checkErr(err)
+	if packetType == "syn" {
+		syn := CreateSyn(conn, SEEDSDIR, USERNAME)
+		packet := CentralProtocol.CreateCentral("syn", util.EncodeToBytes(syn))
+		_, err := conn.Write(util.EncodeToBytes(packet))
+		checkErr(err)
+	}
 }
 
 func CreateSyn(conn net.Conn, dirPath string, username string) CentralProtocol.SYN {

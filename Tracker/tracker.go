@@ -4,6 +4,7 @@ import (
 	"TaxiTorrent/CentralProtocol"
 	"TaxiTorrent/util"
 	"fmt"
+	"io"
 	"net"
 )
 
@@ -45,23 +46,29 @@ func processClient(connection net.Conn, dataBase map[CentralProtocol.File][]stri
 	for {
 		buffer := make([]byte, 1024)
 
-	  mLen, err := connection.Read(buffer)
+		mLen, err := connection.Read(buffer)
 
-	  if err != nil {
-		  fmt.Println("Error reading:", err.Error())
-	  }
-    if mLen == 0 {
+		if err != nil {
+			if err == io.EOF {
+				fmt.Println("Client disconnected")
+			} else {
+				fmt.Println("Error reading:", err.Error())
+			}
+			break
+		}
+		if mLen == 0 {
 			break
 		}
 
-    g := new(CentralProtocol.Central)
-	  util.DecodeToStruct(buffer[:mLen], g)
-
-	  s := new(CentralProtocol.SYN)
-    util.DecodeToStruct(g.Payload, s)
+		g := new(CentralProtocol.Central)
+		util.DecodeToStruct(buffer[:mLen], g)
+		s := new(CentralProtocol.SYN)
+		if err := util.DecodeToStruct(g.Payload, s); err != nil {
+			fmt.Println("Error decoding SYN packet:", err.Error())
+			continue
+		}
 
 		fullAddr := net.JoinHostPort(s.Ip.String(), fmt.Sprintf("%d", s.Port))
-    
 		for _, file := range s.FileList {
 			if _, ok := dataBase[file]; !ok {
 				dataBase[file] = []string{fullAddr}
