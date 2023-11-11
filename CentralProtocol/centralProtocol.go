@@ -15,6 +15,11 @@ type SYN struct {
 	FileList   []File
 }
 
+type Update struct {
+	NFicheiros int
+	FileList   []File
+}
+
 type Central struct {
 	PacketType string
 	Payload    []byte
@@ -39,24 +44,26 @@ func CreateCentral(packetType string, payload []byte) Central {
 
 func CreateEmptyCentral() Central {return Central{}}
 
-func CreateSyn(user string, addr net.IP,
+func CreateSyn(user string, ip net.IP,
 	port uint, nFicheiros int, fileList []File) SYN {
 	return SYN{
 		user,
-		addr,
+		ip,
 		port,
 		nFicheiros,
 		fileList,
 	}
 }
 
-func ReceiveSYN(syn SYN) bool {
-	return true
+func CreateUpdate(nFicheiros int, fileList []File) Update {
+	return Update{
+		nFicheiros,
+		fileList,
+	}
 }
 
-func GetSYNInfo(conn net.Conn, dirPath string) (net.IP, uint, int, []File) {
-	ip := util.GetTCPIP(conn)
-	port := util.GetTCPPort(conn)
+func GetNodeInfo(conn net.Conn, dirPath string) (net.IP, uint, int, []File) {
+	ip, port := util.GetTCPAddr(conn)
 
 	files, err := os.ReadDir(dirPath)
 	if err != nil {

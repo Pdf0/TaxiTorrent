@@ -34,7 +34,6 @@ func main() {
 		if err != nil {
 			fmt.Println("Error accepting: ", err.Error())
 		}
-		fmt.Println("client connected")
 		go processClient(connection, dataBase)
 	}
 
@@ -42,6 +41,9 @@ func main() {
 
 func processClient(connection net.Conn, dataBase map[CentralProtocol.File][]string) {
 	defer connection.Close()
+	ip, port := util.GetTCPAddr(connection)
+	fullAddr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
+	fmt.Println("Node connected (" + fullAddr + ")")
 
 	for {
 		buffer := make([]byte, 1024)
@@ -49,8 +51,10 @@ func processClient(connection net.Conn, dataBase map[CentralProtocol.File][]stri
 		mLen, err := connection.Read(buffer)
 
 		if err != nil {
+			// Se o Node se disconectou, temos de o eliminar da base de dados
 			if err == io.EOF {
-				fmt.Println("Client disconnected")
+				DisconnectNode(dataBase, fullAddr)
+				fmt.Println("Node disconnected (" + fullAddr + ")")
 			} else {
 				fmt.Println("Error reading:", err.Error())
 			}
@@ -62,23 +66,56 @@ func processClient(connection net.Conn, dataBase map[CentralProtocol.File][]stri
 
 		g := new(CentralProtocol.Central)
 		util.DecodeToStruct(buffer[:mLen], g)
-		s := new(CentralProtocol.SYN)
-		if err := util.DecodeToStruct(g.Payload, s); err != nil {
-			fmt.Println("Error decoding SYN packet:", err.Error())
-			continue
+
+		switch g.PacketType {
+		case "syn":
+			s := new(CentralProtocol.SYN)
+			if err := util.DecodeToStruct(g.Payload, s); err != nil {
+				fmt.Println("Error decoding SYN packet:", err.Error())
+				continue
+			}
+			InsertNodeInDataBase(dataBase, s.FileList, fullAddr)
+			fmt.Println("Received: ", *s)
+
+		case "update":
+			u := new(CentralProtocol.Update)
+			if err := util.DecodeToStruct(g.Payload, u); err != nil {
+				fmt.Println("Error decoding Update packet:", err.Error())
+				continue
+			}
+			UpdateNode(dataBase, u.FileList, fullAddr)
+			fmt.Println("Updated Node (" + fullAddr + ")")
+
+		case "get":
+
 		}
 
-		fullAddr := net.JoinHostPort(s.Ip.String(), fmt.Sprintf("%d", s.Port))
-		for _, file := range s.FileList {
-			if _, ok := dataBase[file]; !ok {
-				dataBase[file] = []string{fullAddr}
-			} else {
-				if !util.Contains(dataBase[file], fullAddr) {
-					dataBase[file] = append(dataBase[file], fullAddr)
-				}
+		fmt.Println(dataBase)
+	}
+}
+
+func UpdateNode(dataBase map[CentralProtocol.File][]string, files []CentralProtocol.File, fullAddr string) {
+	DisconnectNode(dataBase, fullAddr)
+	InsertNodeInDataBase(dataBase, files, fullAddr)
+}
+
+func DisconnectNode(dataBase map[CentralProtocol.File][]string, fullAddr string) {
+	for file, list := range dataBase {
+		dataBase[file] = util.RemoveStringFromList(list, fullAddr)
+		if len(dataBase[file]) == 0 {
+			delete(dataBase, file)
+		}
+	}
+}
+
+func InsertNodeInDataBase(dataBase map[CentralProtocol.File][]string, files []CentralProtocol.File, fullAddr string) {
+	for _, file := range files {
+		if _, ok := dataBase[file]; !ok {
+			dataBase[file] = []string{fullAddr}
+		} else {
+			if !util.Contains(dataBase[file], fullAddr) {
+				dataBase[file] = append(dataBase[file], fullAddr)
 			}
 		}
-		fmt.Println("Received: ", *s)
-		fmt.Println(dataBase)
 	}
 }
