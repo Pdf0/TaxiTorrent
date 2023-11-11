@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"net"
+    "crypto/md5"
+    "encoding/hex"
 )
 
 func EncodeToBytes(i interface{}) []byte {
@@ -51,33 +53,33 @@ func DecodeToStruct(s []byte, i interface{}) error {
     return nil
 }
 
-func GetTCPAddr(conn net.Conn) (net.IP, uint) {
-    return GetTCPIP(conn), GetTCPPort(conn) 
+func GetTCPLocalAddr(conn net.Conn) (net.IP, uint) {
+    return GetTCPLocalIP(conn), GetTCPLocalPort(conn) 
 }
 
-func GetTCPIP(conn net.Conn) net.IP {
+func GetTCPLocalIP(conn net.Conn) net.IP {
     return conn.LocalAddr().(*net.TCPAddr).IP
 }
 
-func GetTCPPort(conn net.Conn) uint {
+func GetTCPLocalPort(conn net.Conn) uint {
     return uint(conn.LocalAddr().(*net.TCPAddr).Port)
 }
 
-func Contains(slice []string, value string) bool {
-	for _, v := range slice {
-		if v == value {
-			return true
-		}
-	}
-	return false
+func GetTCPRemoteAddr(conn net.Conn) (net.IP, uint) {
+    return GetTCPRemoteIP(conn), GetTCPRemotePort(conn) 
 }
 
-func RemoveStringFromList(list []string, stringToRemove string) []string {
-	var updatedList []string
-	for _, item := range list {
-		if item != stringToRemove {
-			updatedList = append(updatedList, item)
-		}
-	}
-	return updatedList
+func GetTCPRemoteIP(conn net.Conn) net.IP {
+    return conn.RemoteAddr().(*net.TCPAddr).IP
+}
+
+func GetTCPRemotePort(conn net.Conn) uint {
+    return uint(conn.RemoteAddr().(*net.TCPAddr).Port)
+}
+
+func HashBlockMD5(block []byte) string {
+	hasher := md5.New()
+	hasher.Write(block)
+	hash := hasher.Sum(nil)
+	return hex.EncodeToString(hash)
 }

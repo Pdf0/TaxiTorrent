@@ -14,6 +14,7 @@ const (
 	CLIENT_TYPE = "tcp"
 	SERVER_HOST = "localhost"
 	SERVER_PORT = "10000"
+	BLOCKSIZE   = 256
 )
 
 var SEEDSDIR string

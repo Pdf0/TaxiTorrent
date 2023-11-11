@@ -6,17 +6,25 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"reflect"
 )
 
 const (
 	SERVER_HOST = "localhost"
 	SERVER_PORT = "10000"
 	SERVER_TYPE = "tcp"
+	BLOCKSIZE   = 256
 )
+
+type Seeder struct {
+	Ip     net.IP
+	Port   uint
+	Blocks []string
+}
 
 func main() {
 
-	dataBase := make(map[CentralProtocol.File][]string)
+	dataBase := make(map[string][]Seeder)
 
 	fmt.Println("Server Running...")
 	server, err := net.Listen(SERVER_TYPE, SERVER_HOST+":"+SERVER_PORT)
@@ -36,12 +44,11 @@ func main() {
 		}
 		go processClient(connection, dataBase)
 	}
-
 }
 
-func processClient(connection net.Conn, dataBase map[CentralProtocol.File][]string) {
+func processClient(connection net.Conn, dataBase map[string][]Seeder) {
 	defer connection.Close()
-	ip, port := util.GetTCPAddr(connection)
+	ip, port := util.GetTCPRemoteAddr(connection)
 	fullAddr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
 	fmt.Println("Node connected (" + fullAddr + ")")
 
@@ -51,9 +58,8 @@ func processClient(connection net.Conn, dataBase map[CentralProtocol.File][]stri
 		mLen, err := connection.Read(buffer)
 
 		if err != nil {
-			// Se o Node se disconectou, temos de o eliminar da base de dados
 			if err == io.EOF {
-				DisconnectNode(dataBase, fullAddr)
+				DisconnectNode(dataBase, ip, port)
 				fmt.Println("Node disconnected (" + fullAddr + ")")
 			} else {
 				fmt.Println("Error reading:", err.Error())
@@ -74,7 +80,7 @@ func processClient(connection net.Conn, dataBase map[CentralProtocol.File][]stri
 				fmt.Println("Error decoding SYN packet:", err.Error())
 				continue
 			}
-			InsertNodeInDataBase(dataBase, s.FileList, fullAddr)
+			InsertNodeInDataBase(dataBase, s.FileList, s.Ip, s.Port)
 			fmt.Println("Received: ", *s)
 
 		case "update":
@@ -83,7 +89,7 @@ func processClient(connection net.Conn, dataBase map[CentralProtocol.File][]stri
 				fmt.Println("Error decoding Update packet:", err.Error())
 				continue
 			}
-			UpdateNode(dataBase, u.FileList, fullAddr)
+			UpdateNode(dataBase, u.FileList, ip, port)
 			fmt.Println("Updated Node (" + fullAddr + ")")
 
 		case "get":
@@ -94,28 +100,64 @@ func processClient(connection net.Conn, dataBase map[CentralProtocol.File][]stri
 	}
 }
 
-func UpdateNode(dataBase map[CentralProtocol.File][]string, files []CentralProtocol.File, fullAddr string) {
-	DisconnectNode(dataBase, fullAddr)
-	InsertNodeInDataBase(dataBase, files, fullAddr)
+func UpdateNode(dataBase map[string][]Seeder, files []CentralProtocol.File, ip net.IP, port uint) {
+	DisconnectNode(dataBase, ip, port)
+	InsertNodeInDataBase(dataBase, files, ip, port)
 }
 
-func DisconnectNode(dataBase map[CentralProtocol.File][]string, fullAddr string) {
+func DisconnectNode(dataBase map[string][]Seeder, ip net.IP, port uint) {
 	for file, list := range dataBase {
-		dataBase[file] = util.RemoveStringFromList(list, fullAddr)
+		dataBase[file] = RemoveNodeFromList(list, ip)
 		if len(dataBase[file]) == 0 {
 			delete(dataBase, file)
 		}
 	}
 }
 
-func InsertNodeInDataBase(dataBase map[CentralProtocol.File][]string, files []CentralProtocol.File, fullAddr string) {
+func InsertNodeInDataBase(dataBase map[string][]Seeder, files []CentralProtocol.File, ip net.IP, port uint) {
 	for _, file := range files {
-		if _, ok := dataBase[file]; !ok {
-			dataBase[file] = []string{fullAddr}
+		node := Seeder{
+			ip,
+			port,
+			file.Blocks,
+		}
+		if _, ok := dataBase[file.Name]; !ok {
+			dataBase[file.Name] = []Seeder{}
+			dataBase[file.Name] = append(dataBase[file.Name], node)
 		} else {
-			if !util.Contains(dataBase[file], fullAddr) {
-				dataBase[file] = append(dataBase[file], fullAddr)
+			if !Contains(dataBase[file.Name], node) {
+				dataBase[file.Name] = append(dataBase[file.Name], node)
 			}
 		}
 	}
+}
+
+func Contains(slice []Seeder, seeder Seeder) bool {
+	for _, v := range slice {
+		if AreSeedersEqual(v, seeder) {
+			return true
+		}
+	}
+	return false
+}
+
+func AreSeedersEqual(s1 Seeder, s2 Seeder) bool {
+	if !s1.Ip.Equal(s2.Ip) {
+		return false
+	} else if !(s1.Port == s2.Port) {
+		return false
+	} else if !reflect.DeepEqual(s1.Blocks, s2.Blocks) {
+		return false
+	}
+	return true
+}
+
+func RemoveNodeFromList(list []Seeder, ip net.IP) []Seeder {
+	var updatedList []Seeder
+	for _, item := range list {
+		if !item.Ip.Equal(ip) {
+			updatedList = append(updatedList, item)
+		}
+	}
+	return updatedList
 }
