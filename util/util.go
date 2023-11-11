@@ -51,6 +51,10 @@ func DecodeToStruct(s []byte, i interface{}) error {
     return nil
 }
 
+func GetTCPAddr(conn net.Conn) (net.IP, uint) {
+    return GetTCPIP(conn), GetTCPPort(conn) 
+}
+
 func GetTCPIP(conn net.Conn) net.IP {
     return conn.LocalAddr().(*net.TCPAddr).IP
 }
@@ -66,4 +70,14 @@ func Contains(slice []string, value string) bool {
 		}
 	}
 	return false
+}
+
+func RemoveStringFromList(list []string, stringToRemove string) []string {
+	var updatedList []string
+	for _, item := range list {
+		if item != stringToRemove {
+			updatedList = append(updatedList, item)
+		}
+	}
+	return updatedList
 }
