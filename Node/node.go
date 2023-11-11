@@ -42,7 +42,7 @@ func main() {
 			fmt.Print("File: ")
 			fmt.Scanf("%s", &file)
 		case "update":
-			SendCentral(conn, "update")
+			SendCentral(conn, "syn")
 		case "clear":
 			clear()
 		case "exit":
@@ -72,32 +72,19 @@ func checkErr(err error) {
 func SendCentral(conn net.Conn, packetType string) {
 
 	if packetType == "syn" {
-		syn := CreateSyn(conn)
+		syn := CreateSyn(conn, SEEDSDIR, USERNAME)
 		packet := CentralProtocol.CreateCentral("syn", util.EncodeToBytes(syn))
-		_, err := conn.Write(util.EncodeToBytes(packet))
-		checkErr(err)
-	} else if packetType == "update" {
-		update := CreateUpdate(conn)
-		packet := CentralProtocol.CreateCentral("update", util.EncodeToBytes(update))
 		_, err := conn.Write(util.EncodeToBytes(packet))
 		checkErr(err)
 	}
 }
 
-// Estas duas funções podem muito bem fundir-se, assim como as do centralProtocol.go
-func CreateSyn(conn net.Conn) CentralProtocol.SYN {
+func CreateSyn(conn net.Conn, dirPath string, username string) CentralProtocol.SYN {
 
-	ip, port, nFiles, files := CentralProtocol.GetNodeInfo(conn, SEEDSDIR)
-	syn := CentralProtocol.CreateSyn(USERNAME, ip, port, nFiles, files)
+	ip, port, nFiles, files := CentralProtocol.GetSYNInfo(conn, dirPath)
+	syn := CentralProtocol.CreateSyn(username, ip, port, nFiles, files)
 
 	return syn
-}
-
-func CreateUpdate(conn net.Conn) CentralProtocol.Update {
-	_, _, nFiles, files := CentralProtocol.GetNodeInfo(conn, SEEDSDIR)
-	update := CentralProtocol.CreateUpdate(nFiles, files)
-
-	return update
 }
 
 func GetInitialInfo() (string, string) {
