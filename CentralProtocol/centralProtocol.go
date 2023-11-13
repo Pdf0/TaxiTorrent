@@ -12,6 +12,12 @@ const (
 	BLOCKSIZE = 256
 )
 
+type Seeder struct {
+	Ip     net.IP
+	Port   uint
+	Blocks []string
+}
+
 type SYN struct {
 	Username   string
 	Ip         net.IP
@@ -23,6 +29,18 @@ type SYN struct {
 type Update struct {
 	NFicheiros int
 	FileList   []File
+}
+
+type GetRequest struct {
+	FileName string
+}
+
+type GetResponse struct {
+	Seeders []Seeder
+}
+
+type ListResponse struct {
+	FileList []string
 }
 
 type Central struct {

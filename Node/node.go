@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 const (
@@ -29,7 +30,7 @@ func main() {
 
 	SendCentral(conn, "syn")
 
-	clear()
+	// clear()
 	fmt.Println("Welcome to TaxiTorrent")
 
 	for {
@@ -42,8 +43,11 @@ func main() {
 			var file string
 			fmt.Print("File: ")
 			fmt.Scanf("%s", &file)
+			SendCentral(conn, "get "+file)
 		case "update":
 			SendCentral(conn, "update")
+		case "list":
+			SendCentral(conn, "list")
 		case "clear":
 			clear()
 		case "exit":
@@ -56,17 +60,9 @@ func connectToTracker() net.Conn {
 
 	conn, err := net.Dial(CLIENT_TYPE, SERVER_HOST+":"+SERVER_PORT)
 
-	checkErr(err)
+	util.CheckErr(err)
 
 	return conn
-}
-
-func checkErr(err error) {
-
-	if err != nil {
-
-		panic(err)
-	}
 }
 
 // Função muito javarda mas assim funciona
@@ -76,12 +72,50 @@ func SendCentral(conn net.Conn, packetType string) {
 		syn := CreateSyn(conn)
 		packet := CentralProtocol.CreateCentral("syn", util.EncodeToBytes(syn))
 		_, err := conn.Write(util.EncodeToBytes(packet))
-		checkErr(err)
+		util.CheckErr(err)
+
 	} else if packetType == "update" {
 		update := CreateUpdate(conn)
 		packet := CentralProtocol.CreateCentral("update", util.EncodeToBytes(update))
 		_, err := conn.Write(util.EncodeToBytes(packet))
-		checkErr(err)
+		util.CheckErr(err)
+
+	} else if packetType == "list" {
+		packet := CentralProtocol.CreateCentral("list", []byte{})
+		_, err := conn.Write(util.EncodeToBytes(packet))
+		util.CheckErr(err)
+
+		// fazer uma função para isto, tal como se repete no tracker
+		buffer := make([]byte, 1024)
+		mLen, _ := conn.Read(buffer)
+
+		g := new(CentralProtocol.Central)
+		util.DecodeToStruct(buffer[:mLen], g)
+		lResponse := new(CentralProtocol.ListResponse)
+		if err := util.DecodeToStruct(g.Payload, lResponse); err != nil {
+			fmt.Println("Error decoding ListResponse packet:", err.Error())
+		}
+		fmt.Println(*lResponse)
+
+	} else if strings.HasPrefix(packetType, "get") {
+		args := strings.Fields(packetType)
+		// Checkar se args[1] realmente existe. Ex: "> get "
+		file := args[1]
+		packet := CentralProtocol.CreateCentral("getrequest", util.EncodeToBytes(CentralProtocol.GetRequest{FileName: file}))
+		_, err := conn.Write(util.EncodeToBytes(packet))
+		util.CheckErr(err)
+
+		// fazer uma função para isto, tal como se repete no tracker
+		buffer := make([]byte, 1024)
+		mLen, _ := conn.Read(buffer)
+
+		g := new(CentralProtocol.Central)
+		util.DecodeToStruct(buffer[:mLen], g)
+		gResponse := new(CentralProtocol.GetResponse)
+		if err := util.DecodeToStruct(g.Payload, gResponse); err != nil {
+			fmt.Println("Error decoding GetResponse packet:", err.Error())
+		}
+		fmt.Println(*gResponse)
 	}
 }
 

@@ -83,3 +83,9 @@ func HashBlockMD5(block []byte) string {
 	hash := hasher.Sum(nil)
 	return hex.EncodeToString(hash)
 }
+
+func CheckErr(err error) {
+	if err != nil {
+		panic(err)
+	}
+}

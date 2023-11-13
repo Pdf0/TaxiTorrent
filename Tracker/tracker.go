@@ -10,21 +10,15 @@ import (
 )
 
 const (
-	SERVER_HOST = "localhost"
+	SERVER_HOST = "0.0.0.0"
 	SERVER_PORT = "10000"
 	SERVER_TYPE = "tcp"
 	BLOCKSIZE   = 256
 )
 
-type Seeder struct {
-	Ip     net.IP
-	Port   uint
-	Blocks []string
-}
-
 func main() {
 
-	dataBase := make(map[string][]Seeder)
+	dataBase := make(map[string][]CentralProtocol.Seeder)
 
 	fmt.Println("Server Running...")
 	server, err := net.Listen(SERVER_TYPE, SERVER_HOST+":"+SERVER_PORT)
@@ -46,7 +40,7 @@ func main() {
 	}
 }
 
-func processClient(connection net.Conn, dataBase map[string][]Seeder) {
+func processClient(connection net.Conn, dataBase map[string][]CentralProtocol.Seeder) {
 	defer connection.Close()
 	ip, port := util.GetTCPRemoteAddr(connection)
 	fullAddr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
@@ -82,6 +76,7 @@ func processClient(connection net.Conn, dataBase map[string][]Seeder) {
 			}
 			InsertNodeInDataBase(dataBase, s.FileList, s.Ip, s.Port)
 			fmt.Println("Received: ", *s)
+			fmt.Println(dataBase)
 
 		case "update":
 			u := new(CentralProtocol.Update)
@@ -91,21 +86,48 @@ func processClient(connection net.Conn, dataBase map[string][]Seeder) {
 			}
 			UpdateNode(dataBase, u.FileList, ip, port)
 			fmt.Println("Updated Node (" + fullAddr + ")")
+			fmt.Println(dataBase)
 
-		case "get":
+		case "list":
+			fmt.Println("ListRequest from ", fullAddr)
+			var fileList []string
+			for fileName := range dataBase {
+				fileList = append(fileList, fileName)
+			}
+			lResponse := CentralProtocol.ListResponse{FileList: fileList}
+			central := CentralProtocol.Central{PacketType: "ListResponse", Payload: util.EncodeToBytes(lResponse)}
+			_, err := connection.Write(util.EncodeToBytes(central))
+			util.CheckErr(err)
+			fmt.Println("ListResponse to ", fullAddr, ": ", lResponse)
 
+		case "getrequest":
+			gRequest := new(CentralProtocol.GetRequest)
+			if err := util.DecodeToStruct(g.Payload, gRequest); err != nil {
+				fmt.Println("Error decoding GetRequest packet:", err.Error())
+				continue
+			}
+			fmt.Println("GetRequest from ", fullAddr, ": ", gRequest)
+			var seedersList []CentralProtocol.Seeder
+			for fileName, seeders := range dataBase {
+				if fileName == gRequest.FileName {
+					seedersList = append(seedersList, seeders...)
+				}
+			}
+			gResponse := CentralProtocol.GetResponse{Seeders: seedersList}
+			central := CentralProtocol.Central{PacketType: "GetResponse", Payload: util.EncodeToBytes(gResponse)}
+			_, err := connection.Write(util.EncodeToBytes(central))
+			util.CheckErr(err)
+			fmt.Println("GetResponse to ", fullAddr, ": ", gResponse)
 		}
-
-		fmt.Println(dataBase)
 	}
 }
 
-func UpdateNode(dataBase map[string][]Seeder, files []CentralProtocol.File, ip net.IP, port uint) {
+func UpdateNode(dataBase map[string][]CentralProtocol.Seeder, files []CentralProtocol.File, ip net.IP, port uint) {
 	DisconnectNode(dataBase, ip, port)
 	InsertNodeInDataBase(dataBase, files, ip, port)
 }
 
-func DisconnectNode(dataBase map[string][]Seeder, ip net.IP, port uint) {
+func DisconnectNode(dataBase map[string][]CentralProtocol.Seeder, ip net.IP, port uint) {
 	for file, list := range dataBase {
 		dataBase[file] = RemoveNodeFromList(list, ip)
 		if len(dataBase[file]) == 0 {
@@ -114,15 +136,15 @@ func DisconnectNode(dataBase map[string][]Seeder, ip net.IP, port uint) {
 	}
 }
 
-func InsertNodeInDataBase(dataBase map[string][]Seeder, files []CentralProtocol.File, ip net.IP, port uint) {
+func InsertNodeInDataBase(dataBase map[string][]CentralProtocol.Seeder, files []CentralProtocol.File, ip net.IP, port uint) {
 	for _, file := range files {
-		node := Seeder{
-			ip,
-			port,
-			file.Blocks,
+		node := CentralProtocol.Seeder{
+			Ip:     ip,
+			Port:   port,
+			Blocks: file.Blocks,
 		}
 		if _, ok := dataBase[file.Name]; !ok {
-			dataBase[file.Name] = []Seeder{}
+			dataBase[file.Name] = []CentralProtocol.Seeder{}
 			dataBase[file.Name] = append(dataBase[file.Name], node)
 		} else {
 			if !Contains(dataBase[file.Name], node) {
@@ -132,7 +154,7 @@ func InsertNodeInDataBase(dataBase map[string][]Seeder, files []CentralProtocol.
 	}
 }
 
-func Contains(slice []Seeder, seeder Seeder) bool {
+func Contains(slice []CentralProtocol.Seeder, seeder CentralProtocol.Seeder) bool {
 	for _, v := range slice {
 		if AreSeedersEqual(v, seeder) {
 			return true
@@ -141,7 +163,7 @@ func Contains(slice []Seeder, seeder Seeder) bool {
 	return false
 }
 
-func AreSeedersEqual(s1 Seeder, s2 Seeder) bool {
+func AreSeedersEqual(s1 CentralProtocol.Seeder, s2 CentralProtocol.Seeder) bool {
 	if !s1.Ip.Equal(s2.Ip) {
 		return false
 	} else if !(s1.Port == s2.Port) {
@@ -152,8 +174,8 @@ func AreSeedersEqual(s1 Seeder, s2 Seeder) bool {
 	return true
 }
 
-func RemoveNodeFromList(list []Seeder, ip net.IP) []Seeder {
-	var updatedList []Seeder
+func RemoveNodeFromList(list []CentralProtocol.Seeder, ip net.IP) []CentralProtocol.Seeder {
+	var updatedList []CentralProtocol.Seeder
 	for _, item := range list {
 		if !item.Ip.Equal(ip) {
 			updatedList = append(updatedList, item)
