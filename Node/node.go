@@ -30,7 +30,7 @@ func main() {
 
 	SendCentral(conn, "syn")
 
-	// clear()
+	clear()
 	fmt.Println("Welcome to TaxiTorrent")
 
 	for {
