@@ -1,7 +1,7 @@
 package main
 
 import (
-	"TaxiTorrent/CentralProtocol"
+	"TaxiTorrent/Protocols"
 	"TaxiTorrent/util"
 	"fmt"
 	"net"
@@ -15,7 +15,7 @@ const (
 	CLIENT_TYPE = "tcp"
 	SERVER_HOST = "localhost"
 	SERVER_PORT = "10000"
-	BLOCKSIZE   = 256
+	BLOCKSIZE   = 1024
 )
 
 var SEEDSDIR string
@@ -37,21 +37,24 @@ func main() {
 		command := commandLine()
 
 		switch command {
-		case "help":
-			fmt.Println(" Available commands:\n  help - displays this help menu\n  get - get a file. \n  update - updates your available seeds.\n  clear - clears the screen\n  exit - exits the program")
-		case "get":
-			var file string
-			fmt.Print("File: ")
-			fmt.Scanf("%s", &file)
-			SendCentral(conn, "get "+file)
-		case "update":
+		case "help\n":
+			fmt.Println(" Available commands:\n  help - displays this help menu\n  get <file> - get a file. Example: get file1.txt. \n  update - updates your available seeds.\n  clear - clears the screen\n  exit - exits the program")
+		case "update\n":
 			SendCentral(conn, "update")
-		case "list":
+		case "list\n":
 			SendCentral(conn, "list")
-		case "clear":
+		case "clear\n":
 			clear()
-		case "exit":
+		case "exit\n":
 			os.Exit(0)
+		default:
+			if strings.HasPrefix(command, "get") {
+				SendCentral(conn, command)
+
+				// Começar a conexão udp com os seeders
+			} else {
+				fmt.Println("Invalid command, try using \"help\" to see the available commands")
+			}
 		}
 	}
 }
@@ -70,28 +73,29 @@ func SendCentral(conn net.Conn, packetType string) {
 
 	if packetType == "syn" {
 		syn := CreateSyn(conn)
-		packet := CentralProtocol.CreateCentral("syn", util.EncodeToBytes(syn))
+		packet := Protocols.CreateCentral("syn", util.EncodeToBytes(syn))
 		_, err := conn.Write(util.EncodeToBytes(packet))
 		util.CheckErr(err)
 
 	} else if packetType == "update" {
 		update := CreateUpdate(conn)
-		packet := CentralProtocol.CreateCentral("update", util.EncodeToBytes(update))
+		packet := Protocols.CreateCentral("update", util.EncodeToBytes(update))
 		_, err := conn.Write(util.EncodeToBytes(packet))
 		util.CheckErr(err)
 
 	} else if packetType == "list" {
-		packet := CentralProtocol.CreateCentral("list", []byte{})
+		packet := Protocols.CreateCentral("list", []byte{})
 		_, err := conn.Write(util.EncodeToBytes(packet))
 		util.CheckErr(err)
 
+		// mover esta função para fora daqui, sai bicho
 		// fazer uma função para isto, tal como se repete no tracker
 		buffer := make([]byte, 1024)
 		mLen, _ := conn.Read(buffer)
 
-		g := new(CentralProtocol.Central)
+		g := new(Protocols.Central)
 		util.DecodeToStruct(buffer[:mLen], g)
-		lResponse := new(CentralProtocol.ListResponse)
+		lResponse := new(Protocols.ListResponse)
 		if err := util.DecodeToStruct(g.Payload, lResponse); err != nil {
 			fmt.Println("Error decoding ListResponse packet:", err.Error())
 		}
@@ -101,17 +105,18 @@ func SendCentral(conn net.Conn, packetType string) {
 		args := strings.Fields(packetType)
 		// Checkar se args[1] realmente existe. Ex: "> get "
 		file := args[1]
-		packet := CentralProtocol.CreateCentral("getrequest", util.EncodeToBytes(CentralProtocol.GetRequest{FileName: file}))
+		packet := Protocols.CreateCentral("getrequest", util.EncodeToBytes(Protocols.GetRequest{FileName: file}))
 		_, err := conn.Write(util.EncodeToBytes(packet))
 		util.CheckErr(err)
 
+		// mover esta função para fora daqui, sai bicho
 		// fazer uma função para isto, tal como se repete no tracker
 		buffer := make([]byte, 1024)
 		mLen, _ := conn.Read(buffer)
 
-		g := new(CentralProtocol.Central)
+		g := new(Protocols.Central)
 		util.DecodeToStruct(buffer[:mLen], g)
-		gResponse := new(CentralProtocol.GetResponse)
+		gResponse := new(Protocols.GetResponse)
 		if err := util.DecodeToStruct(g.Payload, gResponse); err != nil {
 			fmt.Println("Error decoding GetResponse packet:", err.Error())
 		}
@@ -119,18 +124,18 @@ func SendCentral(conn net.Conn, packetType string) {
 	}
 }
 
-// Estas duas funções podem muito bem fundir-se, assim como as do centralProtocol.go
-func CreateSyn(conn net.Conn) CentralProtocol.SYN {
+// Estas duas funções podem muito bem fundir-se, assim como as do Protocols.go
+func CreateSyn(conn net.Conn) Protocols.SYN {
 
-	ip, port, nFiles, files := CentralProtocol.GetNodeInfo(conn, SEEDSDIR)
-	syn := CentralProtocol.CreateSyn(USERNAME, ip, port, nFiles, files)
+	ip, port, nFiles, files := Protocols.GetNodeInfo(conn, SEEDSDIR)
+	syn := Protocols.CreateSyn(USERNAME, ip, port, nFiles, files)
 
 	return syn
 }
 
-func CreateUpdate(conn net.Conn) CentralProtocol.Update {
-	_, _, nFiles, files := CentralProtocol.GetNodeInfo(conn, SEEDSDIR)
-	update := CentralProtocol.CreateUpdate(nFiles, files)
+func CreateUpdate(conn net.Conn) Protocols.Update {
+	_, _, nFiles, files := Protocols.GetNodeInfo(conn, SEEDSDIR)
+	update := Protocols.CreateUpdate(nFiles, files)
 
 	return update
 }

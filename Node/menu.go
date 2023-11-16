@@ -1,17 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 )
 
 func commandLine() string{
-	var command string
+	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("\n> ")
-	fmt.Scanf("%s", &command)
+	userInput, _ := reader.ReadString('\n')
 
-	return command
+	return userInput
 }
 
 func clear() {

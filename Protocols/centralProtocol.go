@@ -1,4 +1,4 @@
-package CentralProtocol
+package Protocols
 
 import (
 	"TaxiTorrent/util"

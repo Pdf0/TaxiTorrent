@@ -5,7 +5,8 @@ all: build
 build: format
 	@mkdir -p bin
 	@GO111MODULE=on $(GOCMD) build -o bin/node Node/node.go Node/menu.go
-	@GO111MODULE=on $(GOCMD) build CentralProtocol/centralProtocol.go
+	@GO111MODULE=on $(GOCMD) build Protocols/centralProtocol.go
+	@GO111MODULE=on $(GOCMD) build Protocols/taxiProtocol.go
 	@GO111MODULE=on $(GOCMD) build util/util.go
 	@GO111MODULE=on $(GOCMD) build -o bin/tracker Tracker/tracker.go
 	@echo Compiling Done!
