@@ -79,63 +79,58 @@ func connectToTracker() net.Conn {
 	return conn
 }
 
-// Função muito javarda mas assim funciona
 func SendCentral(conn net.Conn, packetType string) {
 
 	if packetType == "syn" {
 		syn := CreateSyn(conn)
-		packet := Protocols.CreateCentral("syn", util.EncodeToBytes(syn))
+		packet := Protocols.CreateCentral(packetType, util.EncodeToBytes(syn))
 		_, err := conn.Write(util.EncodeToBytes(packet))
 		util.CheckErr(err)
 
 	} else if packetType == "update" {
 		update := CreateUpdate(conn)
-		packet := Protocols.CreateCentral("update", util.EncodeToBytes(update))
+		packet := Protocols.CreateCentral(packetType, util.EncodeToBytes(update))
 		_, err := conn.Write(util.EncodeToBytes(packet))
 		util.CheckErr(err)
 
 	} else if packetType == "list" {
-		packet := Protocols.CreateCentral("list", []byte{})
-		_, err := conn.Write(util.EncodeToBytes(packet))
-		util.CheckErr(err)
 
-		// mover esta função para fora daqui, sai bicho
-		// fazer uma função para isto, tal como se repete no tracker
-		buffer := make([]byte, 1024)
-		mLen, _ := conn.Read(buffer)
-
-		g := new(Protocols.Central)
-		util.DecodeToStruct(buffer[:mLen], g)
+		lRequest := Protocols.CreateCentral(packetType, []byte{})
 		lResponse := new(Protocols.ListResponse)
-		if err := util.DecodeToStruct(g.Payload, lResponse); err != nil {
-			fmt.Println("Error decoding ListResponse packet:", err.Error())
-		}
-		fmt.Println(*lResponse)
+		commsListandGet(conn, packetType, lRequest, lResponse)
 
 	} else if strings.HasPrefix(packetType, "get") {
+
 		args := strings.Fields(packetType)
-		// Checkar se args[1] realmente existe. Ex: "> get "
+
+		// Check if args[1] exists, for example: "> get "
 		file := args[1]
-		packet := Protocols.CreateCentral("getrequest", util.EncodeToBytes(Protocols.GetRequest{FileName: file}))
-		_, err := conn.Write(util.EncodeToBytes(packet))
-		util.CheckErr(err)
 
-		// mover esta função para fora daqui, sai bicho
-		// fazer uma função para isto, tal como se repete no tracker
-		buffer := make([]byte, 1024)
-		mLen, _ := conn.Read(buffer)
-
-		g := new(Protocols.Central)
-		util.DecodeToStruct(buffer[:mLen], g)
+		gRequest := Protocols.GetRequest{FileName: file}
 		gResponse := new(Protocols.GetResponse)
-		if err := util.DecodeToStruct(g.Payload, gResponse); err != nil {
-			fmt.Println("Error decoding GetResponse packet:", err.Error())
-		}
-		fmt.Println(*gResponse)
+		commsListandGet(conn, "getrequest", gRequest, gResponse)
+
 	}
 }
 
-// Estas duas funções podem muito bem fundir-se, assim como as do Protocols.go
+func commsListandGet(conn net.Conn, requestType string, requestData interface{}, responseType interface{}) {
+	packet := Protocols.CreateCentral(requestType, util.EncodeToBytes(requestData))
+	_, err := conn.Write(util.EncodeToBytes(packet))
+	util.CheckErr(err)
+
+	buffer := make([]byte, 1024)
+	mLen, _ := conn.Read(buffer)
+
+	g := new(Protocols.Central)
+	util.DecodeToStruct(buffer[:mLen], g)
+
+	if err := util.DecodeToStruct(g.Payload, responseType); err != nil {
+		fmt.Printf("Error decoding %T packet: %s\n", responseType, err.Error())
+	}
+
+	fmt.Println(responseType)
+}
+
 func CreateSyn(conn net.Conn) Protocols.SYN {
 
 	ip, port, nFiles, files := Protocols.GetNodeInfo(conn, SEEDSDIR)
@@ -149,20 +144,4 @@ func CreateUpdate(conn net.Conn) Protocols.Update {
 	update := Protocols.CreateUpdate(nFiles, files)
 
 	return update
-}
-
-func CreateProtocol(conn net.Conn, protoType string) interface{} {
-	switch protoType {
-	case "syn":
-		ip, port, nFiles, files := Protocols.GetNodeInfo(conn, SEEDSDIR)
-		syn := Protocols.CreateSyn(USERNAME, ip, port, nFiles, files)
-
-		return syn
-	case "update":
-		_, _, nFiles, files := Protocols.GetNodeInfo(conn, SEEDSDIR)
-		update := Protocols.CreateUpdate(nFiles, files)
-
-		return update
-	}
-	return nil
 }
