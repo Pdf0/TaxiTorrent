@@ -55,7 +55,15 @@ func main() {
 					os.Exit(0)
 				default:
 					if strings.HasPrefix(command, "get") {
-						SendCentral(conn, command)
+
+						palavras := strings.Fields(command)
+
+						if len(palavras) == 2 {
+							SendCentral(conn, command)
+						} else {
+							fmt.Println("Please Specify an argument")
+							fmt.Println("> get [file]")
+						}
 
 						// Começar a conexão udp com os seeders
 					} else {
