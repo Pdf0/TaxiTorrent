@@ -23,39 +23,50 @@ var USERNAME string
 
 func main() {
 
-	SEEDSDIR, USERNAME = GetInitialInfo()
+	if len(os.Args) == 3 {
+		if util.DirExists(os.Args[1]) == false {
+			fmt.Println("Non existent Directory")
+		} else {
 
-	conn := connectToTracker()
-	defer conn.Close()
+			SEEDSDIR = os.Args[1]
+			USERNAME = os.Args[2]
 
-	SendCentral(conn, "syn")
+			conn := connectToTracker()
+			defer conn.Close()
 
-	clear()
-	fmt.Println("Welcome to TaxiTorrent")
+			SendCentral(conn, "syn")
 
-	for {
-		command := commandLine()
-
-		switch command {
-		case "help\n":
-			fmt.Println(" Available commands:\n  help - displays this help menu\n  get <file> - get a file. Example: get file1.txt. \n  update - updates your available seeds.\n  clear - clears the screen\n  exit - exits the program")
-		case "update\n":
-			SendCentral(conn, "update")
-		case "list\n":
-			SendCentral(conn, "list")
-		case "clear\n":
 			clear()
-		case "exit\n":
-			os.Exit(0)
-		default:
-			if strings.HasPrefix(command, "get") {
-				SendCentral(conn, command)
+			fmt.Println("Welcome to TaxiTorrent")
 
-				// Começar a conexão udp com os seeders
-			} else {
-				fmt.Println("Invalid command, try using \"help\" to see the available commands")
+			for {
+				command := commandLine()
+
+				switch command {
+				case "help\n":
+					fmt.Println(" Available commands:\n  help - displays this help menu\n  get <file> - get a file. Example: get file1.txt. \n  update - updates your available seeds.\n  clear - clears the screen\n  exit - exits the program")
+				case "update\n":
+					SendCentral(conn, "update")
+				case "list\n":
+					SendCentral(conn, "list")
+				case "clear\n":
+					clear()
+				case "exit\n":
+					os.Exit(0)
+				default:
+					if strings.HasPrefix(command, "get") {
+						SendCentral(conn, command)
+
+						// Começar a conexão udp com os seeders
+					} else {
+						fmt.Println("Invalid command, try using \"help\" to see the available commands")
+					}
+				}
 			}
 		}
+	} else {
+		fmt.Println("The program works as following:")
+		fmt.Println("./node [seeds folder] [username]")
 	}
 }
 
@@ -140,42 +151,18 @@ func CreateUpdate(conn net.Conn) Protocols.Update {
 	return update
 }
 
-func GetInitialInfo() (string, string) {
+func CreateProtocol(conn net.Conn, protoType string) interface{} {
+	switch protoType {
+	case "syn":
+		ip, port, nFiles, files := Protocols.GetNodeInfo(conn, SEEDSDIR)
+		syn := Protocols.CreateSyn(USERNAME, ip, port, nFiles, files)
 
-	return GetDirPath(), GetUsername()
-}
+		return syn
+	case "update":
+		_, _, nFiles, files := Protocols.GetNodeInfo(conn, SEEDSDIR)
+		update := Protocols.CreateUpdate(nFiles, files)
 
-func GetDirPath() string {
-	var path string
-	err := false
-
-	for !err {
-
-		fmt.Print("Seeds Directory: ")
-		fmt.Scanf("%s", &path)
-
-		err = DirExists("Node/" + path)
-
+		return update
 	}
-
-	return "Node/" + path
-}
-
-func DirExists(path string) bool {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true
-	}
-	if os.IsNotExist(err) {
-		return false
-	}
-	return false
-}
-
-func GetUsername() string {
-	var username string
-	fmt.Print("Username: ")
-	fmt.Scanf("%s", &username)
-
-	return username
+	return nil
 }
