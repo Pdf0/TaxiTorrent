@@ -23,39 +23,58 @@ var USERNAME string
 
 func main() {
 
-	SEEDSDIR, USERNAME = GetInitialInfo()
+	if len(os.Args) == 3 {
+		if util.DirExists(os.Args[1]) == false {
+			fmt.Println("Non existent Directory")
+		} else {
 
-	conn := connectToTracker()
-	defer conn.Close()
+			SEEDSDIR = os.Args[1]
+			USERNAME = os.Args[2]
 
-	SendCentral(conn, "syn")
+			conn := connectToTracker()
+			defer conn.Close()
 
-	clear()
-	fmt.Println("Welcome to TaxiTorrent")
+			SendCentral(conn, "syn")
 
-	for {
-		command := commandLine()
-
-		switch command {
-		case "help\n":
-			fmt.Println(" Available commands:\n  help - displays this help menu\n  get <file> - get a file. Example: get file1.txt. \n  update - updates your available seeds.\n  clear - clears the screen\n  exit - exits the program")
-		case "update\n":
-			SendCentral(conn, "update")
-		case "list\n":
-			SendCentral(conn, "list")
-		case "clear\n":
 			clear()
-		case "exit\n":
-			os.Exit(0)
-		default:
-			if strings.HasPrefix(command, "get") {
-				SendCentral(conn, command)
+			fmt.Println("Welcome to TaxiTorrent")
 
-				// Começar a conexão udp com os seeders
-			} else {
-				fmt.Println("Invalid command, try using \"help\" to see the available commands")
+			for {
+				command := commandLine()
+
+				switch command {
+				case "help\n":
+					fmt.Println(" Available commands:\n  help - displays this help menu\n  get <file> - get a file. Example: get file1.txt. \n  update - updates your available seeds.\n  clear - clears the screen\n  exit - exits the program")
+				case "update\n":
+					SendCentral(conn, "update")
+				case "list\n":
+					SendCentral(conn, "list")
+				case "clear\n":
+					clear()
+				case "exit\n":
+					os.Exit(0)
+				default:
+					if strings.HasPrefix(command, "get") {
+
+						palavras := strings.Fields(command)
+
+						if len(palavras) == 2 {
+							SendCentral(conn, command)
+						} else {
+							fmt.Println("Please Specify an argument")
+							fmt.Println("> get [file]")
+						}
+
+						// Começar a conexão udp com os seeders
+					} else {
+						fmt.Println("Invalid command, try using \"help\" to see the available commands")
+					}
+				}
 			}
 		}
+	} else {
+		fmt.Println("The program works as following:")
+		fmt.Println("./node [seeds folder] [username]")
 	}
 }
 
@@ -68,63 +87,58 @@ func connectToTracker() net.Conn {
 	return conn
 }
 
-// Função muito javarda mas assim funciona
 func SendCentral(conn net.Conn, packetType string) {
 
 	if packetType == "syn" {
 		syn := CreateSyn(conn)
-		packet := Protocols.CreateCentral("syn", util.EncodeToBytes(syn))
+		packet := Protocols.CreateCentral(packetType, util.EncodeToBytes(syn))
 		_, err := conn.Write(util.EncodeToBytes(packet))
 		util.CheckErr(err)
 
 	} else if packetType == "update" {
 		update := CreateUpdate(conn)
-		packet := Protocols.CreateCentral("update", util.EncodeToBytes(update))
+		packet := Protocols.CreateCentral(packetType, util.EncodeToBytes(update))
 		_, err := conn.Write(util.EncodeToBytes(packet))
 		util.CheckErr(err)
 
 	} else if packetType == "list" {
-		packet := Protocols.CreateCentral("list", []byte{})
-		_, err := conn.Write(util.EncodeToBytes(packet))
-		util.CheckErr(err)
 
-		// mover esta função para fora daqui, sai bicho
-		// fazer uma função para isto, tal como se repete no tracker
-		buffer := make([]byte, 1024)
-		mLen, _ := conn.Read(buffer)
-
-		g := new(Protocols.Central)
-		util.DecodeToStruct(buffer[:mLen], g)
+		lRequest := Protocols.CreateCentral(packetType, []byte{})
 		lResponse := new(Protocols.ListResponse)
-		if err := util.DecodeToStruct(g.Payload, lResponse); err != nil {
-			fmt.Println("Error decoding ListResponse packet:", err.Error())
-		}
-		fmt.Println(*lResponse)
+		commsListandGet(conn, packetType, lRequest, lResponse)
 
 	} else if strings.HasPrefix(packetType, "get") {
+
 		args := strings.Fields(packetType)
-		// Checkar se args[1] realmente existe. Ex: "> get "
+
+		// Check if args[1] exists, for example: "> get "
 		file := args[1]
-		packet := Protocols.CreateCentral("getrequest", util.EncodeToBytes(Protocols.GetRequest{FileName: file}))
-		_, err := conn.Write(util.EncodeToBytes(packet))
-		util.CheckErr(err)
 
-		// mover esta função para fora daqui, sai bicho
-		// fazer uma função para isto, tal como se repete no tracker
-		buffer := make([]byte, 1024)
-		mLen, _ := conn.Read(buffer)
-
-		g := new(Protocols.Central)
-		util.DecodeToStruct(buffer[:mLen], g)
+		gRequest := Protocols.GetRequest{FileName: file}
 		gResponse := new(Protocols.GetResponse)
-		if err := util.DecodeToStruct(g.Payload, gResponse); err != nil {
-			fmt.Println("Error decoding GetResponse packet:", err.Error())
-		}
-		fmt.Println(*gResponse)
+		commsListandGet(conn, "getrequest", gRequest, gResponse)
+
 	}
 }
 
-// Estas duas funções podem muito bem fundir-se, assim como as do Protocols.go
+func commsListandGet(conn net.Conn, requestType string, requestData interface{}, responseType interface{}) {
+	packet := Protocols.CreateCentral(requestType, util.EncodeToBytes(requestData))
+	_, err := conn.Write(util.EncodeToBytes(packet))
+	util.CheckErr(err)
+
+	buffer := make([]byte, 1024)
+	mLen, _ := conn.Read(buffer)
+
+	g := new(Protocols.Central)
+	util.DecodeToStruct(buffer[:mLen], g)
+
+	if err := util.DecodeToStruct(g.Payload, responseType); err != nil {
+		fmt.Printf("Error decoding %T packet: %s\n", responseType, err.Error())
+	}
+
+	fmt.Println(responseType)
+}
+
 func CreateSyn(conn net.Conn) Protocols.SYN {
 
 	ip, port, nFiles, files := Protocols.GetNodeInfo(conn, SEEDSDIR)
@@ -138,44 +152,4 @@ func CreateUpdate(conn net.Conn) Protocols.Update {
 	update := Protocols.CreateUpdate(nFiles, files)
 
 	return update
-}
-
-func GetInitialInfo() (string, string) {
-
-	return GetDirPath(), GetUsername()
-}
-
-func GetDirPath() string {
-	var path string
-	err := false
-
-	for !err {
-
-		fmt.Print("Seeds Directory: ")
-		fmt.Scanf("%s", &path)
-
-		err = DirExists("Node/" + path)
-
-	}
-
-	return "Node/" + path
-}
-
-func DirExists(path string) bool {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true
-	}
-	if os.IsNotExist(err) {
-		return false
-	}
-	return false
-}
-
-func GetUsername() string {
-	var username string
-	fmt.Print("Username: ")
-	fmt.Scanf("%s", &username)
-
-	return username
 }
