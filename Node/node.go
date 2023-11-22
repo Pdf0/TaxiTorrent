@@ -10,12 +10,13 @@ import (
 )
 
 const (
-	CLIENT_HOST = "localhost"
-	CLIENT_PORT = "10001"
-	CLIENT_TYPE = "tcp"
-	SERVER_HOST = "localhost"
-	SERVER_PORT = "10000"
-	BLOCKSIZE   = 1024
+	CLIENT_HOST    = "localhost"
+	CLIENT_TCPPORT = "10001"
+	CLIENT_UDPPORT = 10002
+	CLIENT_TYPE    = "tcp"
+	SERVER_HOST    = "localhost"
+	SERVER_PORT    = "10000"
+	BLOCKSIZE      = 1024
 )
 
 var SEEDSDIR string
@@ -24,7 +25,7 @@ var USERNAME string
 func main() {
 
 	if len(os.Args) == 3 {
-		if util.DirExists(os.Args[1]) == false {
+		if !util.DirExists(os.Args[1]) {
 			fmt.Println("Non existent Directory")
 		} else {
 
@@ -38,6 +39,8 @@ func main() {
 
 			clear()
 			fmt.Println("Welcome to TaxiTorrent")
+
+			go Listen()
 
 			for {
 				command := commandLine()
@@ -152,4 +155,40 @@ func CreateUpdate(conn net.Conn) Protocols.Update {
 	update := Protocols.CreateUpdate(nFiles, files)
 
 	return update
+}
+
+func Listen() {
+	serverAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", CLIENT_UDPPORT))
+	if err != nil {
+		fmt.Println("Error resolving address:", err)
+		return
+	}
+
+	conn, err := net.ListenUDP("udp", serverAddr)
+	if err != nil {
+		fmt.Println("Error listening:", err)
+		return
+	}
+	defer conn.Close()
+
+	buffer := make([]byte, 1024)
+
+	for {
+		n, clientAddr, err := conn.ReadFromUDP(buffer)
+		if err != nil {
+			fmt.Println("Error reading from connection:", err)
+			continue
+		}
+
+		packet := buffer[:n]
+		fmt.Println("Received data from ", clientAddr.String)
+
+		handleUPDPpacket(packet)
+	}
+}
+
+func handleUPDPpacket(packet []byte) {
+	t := new(Protocols.TaxiProtocol)
+	util.DecodeToStruct(packet, t)
+
 }

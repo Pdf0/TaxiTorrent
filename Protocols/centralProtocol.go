@@ -37,6 +37,7 @@ type GetRequest struct {
 
 type GetResponse struct {
 	Seeders []Seeder
+	Size uint32
 }
 
 type ListResponse struct {
