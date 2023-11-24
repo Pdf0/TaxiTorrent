@@ -7,22 +7,30 @@ import (
 	"net"
 	"os"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 const (
-	CLIENT_HOST    = "localhost"
-	CLIENT_TCPPORT = "10001"
-	CLIENT_UDPPORT = 10002
-	CLIENT_TYPE    = "tcp"
-	SERVER_HOST    = "localhost"
-	SERVER_PORT    = "10000"
-	BLOCKSIZE      = 1024
+	CLIENT_HOST    = "localhost" // dar setup
+	CLIENT_TCPPORT = "10001"     // definir um standard
+
+	CLIENT_TYPE = "tcp" // necessario ?
+
+	SERVER_HOST = "10.4.4.2"
+	SERVER_PORT = "24"
+
+	CLIENT_UDPPORT = "106" // standard node udp port
+
+	BLOCKSIZE = 1024
 )
 
 var SEEDSDIR string
 var USERNAME string
 
 func main() {
+
+	//fmt.Println(CLIENT_UDPPORT)
 
 	if len(os.Args) == 3 {
 		if !util.DirExists(os.Args[1]) {
@@ -62,13 +70,37 @@ func main() {
 						palavras := strings.Fields(command)
 
 						if len(palavras) == 2 {
-							SendCentral(conn, command)
+							//SendCentral(conn, command)
+
+							args := strings.Fields(command)
+
+							// Check if args[1] exists, for example: "> get "
+							file := args[1]
+
+							gRequest := Protocols.GetRequest{FileName: file}
+							gResponse := new(Protocols.GetResponse)
+							commsListandGet(conn, "getrequest", gRequest, gResponse)
+
+							udpconn := connectToSeeder()
+
+							fmt.Println("Conectou-se a um seeder")
+
+							defer udpconn.Close()
+							/*
+								// Começar a conexão udp com os seeders
+
+								//comecar a gerigonca toda das conversas
+
+								//enviar um syn
+								fstmsg := Protocols.CreateSynGates(net.IP(CLIENT_HOST), file)
+								fmt.Println("Enviado -> ", fstmsg)
+							*/
+
 						} else {
 							fmt.Println("Please Specify an argument")
 							fmt.Println("> get [file]")
 						}
 
-						// Começar a conexão udp com os seeders
 					} else {
 						fmt.Println("Invalid command, try using \"help\" to see the available commands")
 					}
@@ -84,6 +116,14 @@ func main() {
 func connectToTracker() net.Conn {
 
 	conn, err := net.Dial(CLIENT_TYPE, SERVER_HOST+":"+SERVER_PORT)
+
+	util.CheckErr(err)
+
+	return conn
+}
+
+func connectToSeeder() net.Conn {
+	conn, err := net.Dial("udp", CLIENT_UDPPORT)
 
 	util.CheckErr(err)
 
@@ -140,6 +180,7 @@ func commsListandGet(conn net.Conn, requestType string, requestData interface{},
 	}
 
 	fmt.Println(responseType)
+
 }
 
 func CreateSyn(conn net.Conn) Protocols.SYN {
@@ -158,7 +199,7 @@ func CreateUpdate(conn net.Conn) Protocols.Update {
 }
 
 func Listen() {
-	serverAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", CLIENT_UDPPORT))
+	serverAddr, err := net.ResolveUDPAddr("udp", ":"+CLIENT_UDPPORT)
 	if err != nil {
 		fmt.Println("Error resolving address:", err)
 		return
@@ -181,14 +222,18 @@ func Listen() {
 		}
 
 		packet := buffer[:n]
-		fmt.Println("Received data from ", clientAddr.String)
+		fmt.Println("Received data from ", clientAddr, packet)
 
-		handleUPDPpacket(packet)
+		//conId, id, payload := handleUPDPpacket(packet)
+
+		//enviar coisas para o outro node
+
 	}
 }
 
-func handleUPDPpacket(packet []byte) {
+func handleUPDPpacket(packet []byte) (uuid.UUID, uint8, []byte) {
 	t := new(Protocols.TaxiProtocol)
 	util.DecodeToStruct(packet, t)
 
+	return t.ConnId, t.Id, t.Payload
 }

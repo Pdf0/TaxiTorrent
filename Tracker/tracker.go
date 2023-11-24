@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	SERVER_HOST = "localhost"
-	SERVER_PORT = "10000"
+	SERVER_HOST = "10.4.4.2"
+	SERVER_PORT = "24"
 	SERVER_TYPE = "tcp"
 	BLOCKSIZE   = 256
 )

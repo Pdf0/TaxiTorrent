@@ -2,6 +2,7 @@ package Protocols
 
 import (
 	"net"
+
 	"github.com/google/uuid"
 )
 
@@ -14,13 +15,13 @@ import (
 */
 
 type TaxiProtocol struct {
-	ConnId uuid.UUID
-	Id uint8
+	ConnId  uuid.UUID
+	Id      uint8
 	Payload []byte
 }
 
-type Syn struct {
-	Ip net.IP
+type SynGates struct {
+	Ip       net.IP
 	FileName string
 }
 
@@ -30,10 +31,17 @@ type Request struct {
 
 type Data struct {
 	BlockId uint16
-	Block []byte
-	Hash string
+	Block   []byte
+	Hash    string
 }
 
 type Maddy struct {
 	BlockId uint16
+}
+
+func CreateSynGates(ip net.IP, fileName string) SynGates {
+	return SynGates{
+		ip,
+		fileName,
+	}
 }
