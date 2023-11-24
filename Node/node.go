@@ -12,18 +12,20 @@ import (
 )
 
 const (
-	CLIENT_HOST    = "localhost" // dar setup
-	CLIENT_TCPPORT = "10001"     // definir um standard
+	CLIENT_TCPPORT = "100" // definir um standard
 
 	CLIENT_TYPE = "tcp" // necessario ?
 
+	// valores definidos na topologia para o servidor 2
 	SERVER_HOST = "10.4.4.2"
 	SERVER_PORT = "24"
 
-	CLIENT_UDPPORT = "106" // standard node udp port
+	CLIENT_UDPPORT = "106"
 
 	BLOCKSIZE = 1024
 )
+
+var CLIENT_HOST string
 
 var SEEDSDIR string
 var USERNAME string
@@ -31,6 +33,8 @@ var USERNAME string
 func main() {
 
 	//fmt.Println(CLIENT_UDPPORT)
+
+	CLIENT_HOST = getPublicIP()
 
 	if len(os.Args) == 3 {
 		if !util.DirExists(os.Args[1]) {
@@ -111,6 +115,17 @@ func main() {
 		fmt.Println("The program works as following:")
 		fmt.Println("./node [seeds folder] [username]")
 	}
+}
+
+func getPublicIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	return localAddr.IP.String()
 }
 
 func connectToTracker() net.Conn {

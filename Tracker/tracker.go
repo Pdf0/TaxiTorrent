@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	SERVER_HOST = "10.4.4.2"
+	SERVER_HOST = "10.4.4.2" // servidor2
 	SERVER_PORT = "24"
 	SERVER_TYPE = "tcp"
 	BLOCKSIZE   = 256
