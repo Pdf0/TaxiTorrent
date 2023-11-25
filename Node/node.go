@@ -85,7 +85,11 @@ func main() {
 
 							// fazer o algoritmo de distribuicao de seeders
 
-							udpconn := connectToSeeder(gResponse.Seeders[0].Ip)
+							udpAddr, _ := net.ResolveUDPAddr("udp", gResponse.Seeders[0].Ip.String()+":"+"100")
+
+							fmt.Println(udpAddr)
+
+							udpconn := connectToSeeder(udpAddr)
 
 							fmt.Println("Ligacao P2P ativada")
 
@@ -136,8 +140,9 @@ func connectToTracker() net.Conn {
 	return conn
 }
 
-func connectToSeeder(addr net.IP) net.Conn {
-	conn, err := net.Dial("udp", addr.String()+":"+"24")
+func connectToSeeder(addr *net.UDPAddr) net.Conn {
+	//conn, err := net.Dial("udp", addr.String())
+	conn, err := net.Dial("udp", ":100")
 
 	util.CheckErr(err)
 
@@ -218,6 +223,8 @@ func Listen() {
 		fmt.Println("Error resolving address:", err)
 		return
 	}
+
+	fmt.Println(serverAddr)
 
 	conn, err := net.ListenUDP("udp", serverAddr)
 	if err != nil {
