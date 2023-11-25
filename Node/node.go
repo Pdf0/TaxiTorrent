@@ -20,7 +20,7 @@ const (
 	SERVER_HOST = "10.4.4.2"
 	SERVER_PORT = "24"
 
-	CLIENT_UDPPORT = "106"
+	CLIENT_UDPPORT = "100"
 
 	BLOCKSIZE = 1024
 )
@@ -31,8 +31,6 @@ var SEEDSDIR string
 var USERNAME string
 
 func main() {
-
-	//fmt.Println(CLIENT_UDPPORT)
 
 	CLIENT_HOST = getPublicIP()
 
@@ -85,20 +83,21 @@ func main() {
 							gResponse := new(Protocols.GetResponse)
 							commsListandGet(conn, "getrequest", gRequest, gResponse)
 
-							udpconn := connectToSeeder()
+							// fazer o algoritmo de distribuicao de seeders
 
-							fmt.Println("Conectou-se a um seeder")
+							udpconn := connectToSeeder(gResponse.Seeders[0].Ip)
+
+							fmt.Println("Ligacao P2P ativada")
 
 							defer udpconn.Close()
-							/*
-								// Começar a conexão udp com os seeders
 
-								//comecar a gerigonca toda das conversas
+							// Começar a conexão udp com os seeders
 
-								//enviar um syn
-								fstmsg := Protocols.CreateSynGates(net.IP(CLIENT_HOST), file)
-								fmt.Println("Enviado -> ", fstmsg)
-							*/
+							//comecar a gerigonca toda das conversas
+
+							//enviar um syn
+							fstmsg := Protocols.CreateSynGates(net.IP(CLIENT_HOST), file)
+							fmt.Println("Enviado -> ", fstmsg)
 
 						} else {
 							fmt.Println("Please Specify an argument")
@@ -137,8 +136,8 @@ func connectToTracker() net.Conn {
 	return conn
 }
 
-func connectToSeeder() net.Conn {
-	conn, err := net.Dial("udp", CLIENT_UDPPORT)
+func connectToSeeder(addr net.IP) net.Conn {
+	conn, err := net.Dial("udp", ":"+addr.String())
 
 	util.CheckErr(err)
 
