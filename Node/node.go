@@ -137,7 +137,7 @@ func connectToTracker() net.Conn {
 }
 
 func connectToSeeder(addr net.IP) net.Conn {
-	conn, err := net.Dial("udp", ":"+addr.String())
+	conn, err := net.Dial("udp", addr.String()+":"+"24")
 
 	util.CheckErr(err)
 
