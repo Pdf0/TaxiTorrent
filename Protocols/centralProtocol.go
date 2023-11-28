@@ -148,3 +148,17 @@ func GetBlocksHashes(fp string) []string {
 	}
 	return blocks
 }
+
+
+func DeepCopySeeders(seeders []Seeder) []Seeder {
+	newSeeder := make([]Seeder, len(seeders))
+
+	for i, seeder := range seeders {
+		newSeeder[i] = DeepCopySeeder(seeder)
+	}
+	return newSeeder
+}
+
+func DeepCopySeeder(s Seeder) Seeder {
+	return Seeder{Ip: s.Ip, Port: s.Port, BlocksAvailable: s.BlocksAvailable, BlocksToDownload: s.BlocksToDownload}
+}

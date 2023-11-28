@@ -84,6 +84,8 @@ func main() {
 							// Check if args[1] exists, for example: "> get "
 							file := args[1]
 
+							// Verificar se o Node já tem o ficheiro que está a pedir
+
 							gRequest := Protocols.GetRequest{FileName: file}
 							gResponse := new(Protocols.GetResponse)
 							commsListandGet(conn, "getrequest", gRequest, gResponse)
@@ -95,7 +97,6 @@ func main() {
 							fmt.Println("Please Specify an argument")
 							fmt.Println("> get [file]")
 						}
-
 					} else {
 						fmt.Println("Invalid command, try using \"help\" to see the available commands")
 					}
@@ -129,8 +130,7 @@ func connectToTracker() net.Conn {
 }
 
 func connectToSeeder(addr *net.UDPAddr) net.Conn {
-	//conn, err := net.Dial("udp", addr.String())
-	conn, err := net.Dial("udp", CLIENT_UDPPORT)
+	conn, err := net.Dial("udp", addr.String())
 
 	util.CheckErr(err)
 
@@ -185,9 +185,7 @@ func commsListandGet(conn net.Conn, requestType string, requestData interface{},
 	if err := util.DecodeToStruct(g.Payload, responseType); err != nil {
 		fmt.Printf("Error decoding %T packet: %s\n", responseType, err.Error())
 	}
-
 	fmt.Println(responseType)
-
 }
 
 func CreateSyn(conn net.Conn) Protocols.SYN {
@@ -212,8 +210,6 @@ func Listen() {
 		return
 	}
 
-	fmt.Println(serverAddr)
-
 	conn, err := net.ListenUDP("udp", serverAddr)
 	if err != nil {
 		fmt.Println("Error listening:", err)
@@ -236,7 +232,6 @@ func Listen() {
 		//conId, id, payload := handleUPDPpacket(packet)
 
 		//enviar coisas para o outro node
-
 	}
 }
 

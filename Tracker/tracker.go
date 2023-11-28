@@ -111,8 +111,9 @@ func processClient(connection net.Conn, dataBase map[string]*Protocols.FileInfo)
 			var fileSize uint64
 			for fileName, fileInfo := range dataBase {
 				if fileName == gRequest.FileName {
-					copy(seedersList, fileInfo.SeedersInfo)
+					seedersList = Protocols.DeepCopySeeders(fileInfo.SeedersInfo)
 					fileSize = fileInfo.FileSize
+					fmt.Println(fileInfo.SeedersInfo)
 				}
 			}
 			gResponse := Protocols.GetResponse{Seeders: seedersList, Size: fileSize}
