@@ -15,7 +15,8 @@ const (
 type Seeder struct {
 	Ip     net.IP
 	Port   uint
-	Blocks []string
+	BlocksAvailable []string
+	BlocksToDownload []bool
 }
 
 type SYN struct {
@@ -37,7 +38,7 @@ type GetRequest struct {
 
 type GetResponse struct {
 	Seeders []Seeder
-	Size    uint32
+	Size    uint64
 }
 
 type ListResponse struct {

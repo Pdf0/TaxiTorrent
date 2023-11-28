@@ -11,7 +11,7 @@ import (
 
 const (
 	SERVER_HOST = "10.4.4.2" // servidor2
-	SERVER_PORT = "24"
+	SERVER_PORT = "9090"
 	SERVER_TYPE = "tcp"
 	BLOCKSIZE   = 256
 )
@@ -139,9 +139,9 @@ func DisconnectNode(dataBase map[string][]Protocols.Seeder, ip net.IP, port uint
 func InsertNodeInDataBase(dataBase map[string][]Protocols.Seeder, files []Protocols.File, ip net.IP, port uint) {
 	for _, file := range files {
 		node := Protocols.Seeder{
-			Ip:     ip,
-			Port:   port,
-			Blocks: file.Blocks,
+			Ip:              ip,
+			Port:            port,
+			BlocksAvailable: file.Blocks,
 		}
 		if _, ok := dataBase[file.Name]; !ok {
 			dataBase[file.Name] = []Protocols.Seeder{}
@@ -168,7 +168,7 @@ func AreSeedersEqual(s1 Protocols.Seeder, s2 Protocols.Seeder) bool {
 		return false
 	} else if !(s1.Port == s2.Port) {
 		return false
-	} else if !reflect.DeepEqual(s1.Blocks, s2.Blocks) {
+	} else if !reflect.DeepEqual(s1.BlocksAvailable, s2.BlocksAvailable) {
 		return false
 	}
 	return true

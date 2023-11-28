@@ -1,4 +1,4 @@
-package main
+package node
 
 import (
 	"TaxiTorrent/Protocols"
@@ -12,27 +12,33 @@ import (
 )
 
 const (
-	CLIENT_TCPPORT = "100" // definir um standard
-
 	CLIENT_TYPE = "tcp" // necessario ?
 
 	// valores definidos na topologia para o servidor 2
-	SERVER_HOST = "10.4.4.2"
-	SERVER_PORT = "24"
+	SERVER_IP   = "10.4.4.2"
+	SERVER_PORT = "9090"
 
-	CLIENT_UDPPORT = "100"
+	CLIENT_UDPPORT = "9090"
 
 	BLOCKSIZE = 1024
 )
 
-var CLIENT_HOST string
+type Connection struct {
+	conn             net.Conn
+	FileName         string
+	FileSize         uint64 // bytes
+	BlocksDownloaded []byte
+	BlocksToDownload []int
+}
 
+var CLIENT_HOST string
 var SEEDSDIR string
 var USERNAME string
 
 func main() {
 
 	CLIENT_HOST = getPublicIP()
+	dataBase := createDataBase()
 
 	if len(os.Args) == 3 {
 		if !util.DirExists(os.Args[1]) {
@@ -72,7 +78,6 @@ func main() {
 						palavras := strings.Fields(command)
 
 						if len(palavras) == 2 {
-							//SendCentral(conn, command)
 
 							args := strings.Fields(command)
 
@@ -83,25 +88,8 @@ func main() {
 							gResponse := new(Protocols.GetResponse)
 							commsListandGet(conn, "getrequest", gRequest, gResponse)
 
-							// fazer o algoritmo de distribuicao de seeders
-
-							udpAddr, _ := net.ResolveUDPAddr("udp", gResponse.Seeders[0].Ip.String()+":"+"100")
-
-							fmt.Println(udpAddr)
-
-							udpconn := connectToSeeder(udpAddr)
-
-							fmt.Println("Ligacao P2P ativada")
-
-							defer udpconn.Close()
-
-							// Começar a conexão udp com os seeders
-
-							//comecar a gerigonca toda das conversas
-
-							//enviar um syn
-							fstmsg := Protocols.CreateSynGates(net.IP(CLIENT_HOST), file)
-							fmt.Println("Enviado -> ", fstmsg)
+							dataBase = sendInitialSynPackets(gResponse, file, dataBase)
+							fmt.Println(dataBase)
 
 						} else {
 							fmt.Println("Please Specify an argument")
@@ -133,7 +121,7 @@ func getPublicIP() string {
 
 func connectToTracker() net.Conn {
 
-	conn, err := net.Dial(CLIENT_TYPE, SERVER_HOST+":"+SERVER_PORT)
+	conn, err := net.Dial(CLIENT_TYPE, SERVER_IP+":"+SERVER_PORT)
 
 	util.CheckErr(err)
 
@@ -142,7 +130,7 @@ func connectToTracker() net.Conn {
 
 func connectToSeeder(addr *net.UDPAddr) net.Conn {
 	//conn, err := net.Dial("udp", addr.String())
-	conn, err := net.Dial("udp", ":100")
+	conn, err := net.Dial("udp", CLIENT_UDPPORT)
 
 	util.CheckErr(err)
 
@@ -257,4 +245,42 @@ func handleUPDPpacket(packet []byte) (uuid.UUID, uint8, []byte) {
 	util.DecodeToStruct(packet, t)
 
 	return t.ConnId, t.Id, t.Payload
+}
+
+func createDataBase() map[string]Connection {
+	return make(map[string]Connection)
+}
+
+func sendInitialSynPackets(gResponse *Protocols.GetResponse, fileName string, dataBase map[string]Connection) map[string]Connection {
+
+	//Algoritmo de distribuição de blocos (Para já só distribui os blocos continua e uniformente)
+	blocksPerNode := (int(gResponse.Size) / BLOCKSIZE) / len(gResponse.Seeders)
+
+	blocksOffset := 0
+	for _, node := range gResponse.Seeders {
+		udpAddr, _ := net.ResolveUDPAddr("udp", node.Ip.String()+":"+CLIENT_UDPPORT)
+		fmt.Println(udpAddr)
+
+		udpconn := connectToSeeder(udpAddr)
+		fmt.Println("Ligacao P2P ativada")
+		defer udpconn.Close()
+
+		blocksToDownload := util.CreateListFromTo(blocksOffset, blocksOffset+blocksPerNode)
+		blocksOffset = blocksOffset + blocksPerNode
+
+		// Adicionar à bd só a seguir de recebermos o ACK
+		// Para isto teremos que adicionar cada Seeder numa thread diferente
+		dataBase[node.Ip.String()] = Connection{
+			udpconn,
+			fileName,
+			gResponse.Size,
+			make([]byte, 0),
+			blocksToDownload,
+		}
+	}
+	// Está ao contrário, primeiro enviamos os syn's e só depois criamos na BD
+	fstmsg := Protocols.CreateSynGates(net.IP(CLIENT_HOST), fileName)
+	fmt.Println("Enviado -> ", fstmsg)
+
+	return dataBase
 }

@@ -101,3 +101,12 @@ func DirExists(path string) bool {
 	}
 	return false
 }
+
+func CreateListFromTo(from int, to int) []int {
+	list := make([]int, 0)
+
+	for i := from; i < to; i++ {
+		list = append(list, i)
+	}
+	return list
+}

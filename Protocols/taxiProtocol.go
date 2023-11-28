@@ -2,7 +2,6 @@ package Protocols
 
 import (
 	"net"
-
 	"github.com/google/uuid"
 )
 
