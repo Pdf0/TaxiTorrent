@@ -12,6 +12,11 @@ const (
 	BLOCKSIZE = 256
 )
 
+type FileInfo struct {
+	FileSize uint64
+	SeedersInfo []Seeder
+}
+
 type Seeder struct {
 	Ip     net.IP
 	Port   uint
