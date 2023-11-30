@@ -2,7 +2,6 @@ package Protocols
 
 import (
 	"net"
-	"github.com/google/uuid"
 )
 
 /*  id list:
@@ -13,10 +12,15 @@ import (
 - 4 - maddy (missing)
 */
 
+type UDPConnectionInfo struct {
+    LocalAddr  string
+    RemoteAddr string
+}
+
 type TaxiProtocol struct {
-	ConnId  uuid.UUID
-	Id      uint8
-	Payload []byte
+    ConnInfo UDPConnectionInfo
+    Id       uint8
+    Payload  []byte
 }
 
 type SynGates struct {
@@ -25,11 +29,11 @@ type SynGates struct {
 }
 
 type Request struct {
-	Blocklist []uint16
+	Blocklist []int
 }
 
 type Data struct {
-	BlockId uint16
+	BlockId int
 	Block   []byte
 	Hash    string
 }
@@ -42,5 +46,12 @@ func CreateSynGates(ip net.IP, fileName string) SynGates {
 	return SynGates{
 		ip,
 		fileName,
+	}
+}
+
+func GetUDPConnInfo(conn *net.UDPConn) UDPConnectionInfo {
+	return UDPConnectionInfo{
+		LocalAddr:  conn.LocalAddr().String(),
+		RemoteAddr: conn.RemoteAddr().String(),
 	}
 }

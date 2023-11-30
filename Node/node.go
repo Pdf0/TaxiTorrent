@@ -7,8 +7,8 @@ import (
 	"net"
 	"os"
 	"strings"
-
-	"github.com/google/uuid"
+	"sync"
+	"time"
 )
 
 const (
@@ -24,7 +24,7 @@ const (
 )
 
 type Connection struct {
-	conn             net.Conn
+	conn             *net.UDPConn
 	FileName         string
 	FileSize         uint64 // bytes
 	BlocksDownloaded []byte
@@ -34,6 +34,8 @@ type Connection struct {
 var CLIENT_HOST string
 var SEEDSDIR string
 var USERNAME string
+var ackMutex sync.Mutex
+var closeOnce sync.Once
 
 func main() {
 
@@ -81,17 +83,27 @@ func main() {
 
 							args := strings.Fields(command)
 
-							// Check if args[1] exists, for example: "> get "
+							//FIX: Check if args[1] exists, for example: "> get "
 							file := args[1]
 
-							// Verificar se o Node já tem o ficheiro que está a pedir
+							//TODO: Verificar se o Node já tem o ficheiro que está a pedir
 
 							gRequest := Protocols.GetRequest{FileName: file}
 							gResponse := new(Protocols.GetResponse)
 							commsListandGet(conn, "getrequest", gRequest, gResponse)
 
-							dataBase = sendInitialSynPackets(gResponse, file, dataBase)
-							fmt.Println(dataBase)
+							sendInitialSynPackets(gResponse, file, &dataBase)
+
+							//TODO: Verificar se todos os handshakes foram bem sucedidos
+
+							var wg sync.WaitGroup
+							for nodeIp, connection := range dataBase {
+								wg.Add(1)
+								go getBlocksFromNode(nodeIp, connection, &wg)
+							}
+							wg.Wait()
+
+							//TODO: Verificar se todos os blocos estão downloaded
 
 						} else {
 							fmt.Println("Please Specify an argument")
@@ -129,8 +141,9 @@ func connectToTracker() net.Conn {
 	return conn
 }
 
-func connectToSeeder(addr *net.UDPAddr) net.Conn {
-	conn, err := net.Dial("udp", addr.String())
+func connectToSeeder(udpAddr *net.UDPAddr) *net.UDPConn {
+
+	conn, err := net.DialUDP("udp", nil, udpAddr)
 
 	util.CheckErr(err)
 
@@ -185,7 +198,6 @@ func commsListandGet(conn net.Conn, requestType string, requestData interface{},
 	if err := util.DecodeToStruct(g.Payload, responseType); err != nil {
 		fmt.Printf("Error decoding %T packet: %s\n", responseType, err.Error())
 	}
-	fmt.Println(responseType)
 }
 
 func CreateSyn(conn net.Conn) Protocols.SYN {
@@ -227,55 +239,162 @@ func Listen() {
 		}
 
 		packet := buffer[:n]
-		fmt.Println("Received data from ", clientAddr, packet)
+		fmt.Println("Received data from ", clientAddr)
 
-		//conId, id, payload := handleUPDPpacket(packet)
-
-		//enviar coisas para o outro node
+		handleUDPpacket(conn, packet)
 	}
 }
 
-func handleUPDPpacket(packet []byte) (uuid.UUID, uint8, []byte) {
+func handleUDPpacket(conn *net.UDPConn, packet []byte) {
 	t := new(Protocols.TaxiProtocol)
 	util.DecodeToStruct(packet, t)
 
-	return t.ConnId, t.Id, t.Payload
+	if t.Id == 0 {
+
+		udpAddr, _ := net.ResolveUDPAddr("udp", t.ConnInfo.LocalAddr)
+
+		fmt.Println(udpAddr)
+		taxiAck := createAck(t.ConnInfo)
+		_, err := conn.WriteToUDP(util.EncodeToBytes(taxiAck), udpAddr)
+		util.CheckErr(err)
+
+		fmt.Println("Ack sent to", t.ConnInfo.RemoteAddr)
+	}
+}
+
+func createAck(connInfo Protocols.UDPConnectionInfo) Protocols.TaxiProtocol {
+	return Protocols.TaxiProtocol{
+		ConnInfo: connInfo,
+		Id:       uint8(1),
+	}
 }
 
 func createDataBase() map[string]Connection {
 	return make(map[string]Connection)
 }
 
-func sendInitialSynPackets(gResponse *Protocols.GetResponse, fileName string, dataBase map[string]Connection) map[string]Connection {
+func sendInitialSynPackets(gResponse *Protocols.GetResponse, fileName string, dataBase *map[string]Connection) {
 
 	//Algoritmo de distribuição de blocos (Para já só distribui os blocos continua e uniformente)
 	blocksPerNode := (int(gResponse.Size) / BLOCKSIZE) / len(gResponse.Seeders)
-
 	blocksOffset := 0
+
+	var wg sync.WaitGroup
 	for _, node := range gResponse.Seeders {
-		udpAddr, _ := net.ResolveUDPAddr("udp", node.Ip.String()+":"+CLIENT_UDPPORT)
-		fmt.Println(udpAddr)
-
-		udpconn := connectToSeeder(udpAddr)
-		fmt.Println("Ligacao P2P ativada")
-		defer udpconn.Close()
-
-		blocksToDownload := util.CreateListFromTo(blocksOffset, blocksOffset+blocksPerNode)
+		wg.Add(1)
+		go makeHandshake(node, fileName, gResponse.Size, blocksPerNode, blocksOffset, dataBase, &wg)
 		blocksOffset = blocksOffset + blocksPerNode
+	}
+	wg.Wait()
+}
 
-		// Adicionar à bd só a seguir de recebermos o ACK
-		// Para isto teremos que adicionar cada Seeder numa thread diferente
-		dataBase[node.Ip.String()] = Connection{
-			udpconn,
-			fileName,
-			gResponse.Size,
-			make([]byte, 0),
-			blocksToDownload,
+func makeHandshake(node Protocols.Seeder, fileName string, fileSize uint64, nBlocks int, blocksOffset int, dataBase *map[string]Connection, wg *sync.WaitGroup) {
+
+	defer wg.Done()
+	udpAddr, _ := net.ResolveUDPAddr("udp", node.Ip.String()+":"+CLIENT_UDPPORT)
+	udpconn := connectToSeeder(udpAddr)
+
+	fmt.Println("P2P connection established with", udpAddr)
+
+	sendInitialSynPacket(fileName, udpconn)
+
+	ackReceived := make(chan bool)
+	go waitForAck(udpconn, ackReceived)
+
+	retries := 3
+	ackReceivedFlag := false
+
+retryloop:
+	for i := 0; i < retries; i++ {
+		select {
+		case <-ackReceived:
+			fmt.Println("ACK received")
+			ackReceivedFlag = true
+			break retryloop
+		case <-time.After(1 * time.Second):
+			fmt.Println("Resending SynGate")
+			sendInitialSynPacket(fileName, udpconn)
 		}
 	}
-	// Está ao contrário, primeiro enviamos os syn's e só depois criamos na BD
-	fstmsg := Protocols.CreateSynGates(net.IP(CLIENT_HOST), fileName)
-	fmt.Println("Enviado -> ", fstmsg)
+	if !ackReceivedFlag {
+		fmt.Println("Closing connection, no ACK received.")
+		udpconn.Close()
+		return
+	}
+	blocksToDownload := util.CreateListFromTo(blocksOffset, blocksOffset+nBlocks)
+	(*dataBase)[node.Ip.String()] = Connection{
+		udpconn,
+		fileName,
+		fileSize,
+		make([]byte, 0),
+		blocksToDownload,
+	}
+}
 
-	return dataBase
+func waitForAck(udpconn net.Conn, ackReceived chan bool) {
+	buffer := make([]byte, 1024)
+	n, err := udpconn.Read(buffer)
+	if err != nil {
+		fmt.Println("Error reading from UDP connection:", err)
+		ackMutex.Lock()
+		closeOnce.Do(func() {
+			close(ackReceived)
+		})
+		ackMutex.Unlock()
+		return
+	}
+
+	packet := buffer[:n]
+	t := new(Protocols.TaxiProtocol)
+	util.DecodeToStruct(packet, t)
+
+	if t.Id == 1 {
+		fmt.Println("ACK received")
+		ackMutex.Lock()
+		closeOnce.Do(func() {
+			close(ackReceived)
+		})
+		ackMutex.Unlock()
+	} else {
+		fmt.Println("Unexpected packet received. Closing connection.")
+		ackMutex.Lock()
+		closeOnce.Do(func() {
+			close(ackReceived)
+		})
+		ackMutex.Unlock()
+	}
+}
+
+func sendInitialSynPacket(fileName string, udpconn *net.UDPConn) *net.UDPConn {
+
+	synGate := Protocols.CreateSynGates(net.IP(CLIENT_HOST), fileName)
+	taxi := Protocols.TaxiProtocol{ConnInfo: Protocols.GetUDPConnInfo(udpconn), Id: 0, Payload: util.EncodeToBytes(synGate)}
+	_, err := udpconn.Write(util.EncodeToBytes(taxi))
+
+	util.CheckErr(err)
+
+	fmt.Println("SynGate sent successfully")
+
+	return udpconn
+}
+
+func getBlocksFromNode(nodeIp string, connection Connection, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for len(connection.BlocksToDownload) > 0 {
+		sendRequest(nodeIp, connection)
+	}
+}
+
+func sendRequest(nodeIP string, connection Connection) {
+
+	request := Protocols.Request{Blocklist: connection.BlocksToDownload}
+	taxi := Protocols.TaxiProtocol{
+		ConnInfo: Protocols.GetUDPConnInfo(connection.conn),
+		Id: 2,
+		Payload: util.EncodeToBytes(request),
+	}
+
+	_, err := connection.conn.Write(util.EncodeToBytes(taxi))
+
+	util.CheckErr(err)
 }

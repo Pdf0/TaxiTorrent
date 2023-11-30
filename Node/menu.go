@@ -7,7 +7,7 @@ import (
 	"os/exec"
 )
 
-func commandLine() string{
+func commandLine() string {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("\n> ")
 	userInput, _ := reader.ReadString('\n')
@@ -17,8 +17,6 @@ func commandLine() string{
 
 func clear() {
 	cmd := exec.Command("clear")
-    cmd.Stdout = os.Stdout
-    cmd.Run()
+	cmd.Stdout = os.Stdout
+	cmd.Run()
 }
-
-
