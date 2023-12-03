@@ -4,6 +4,7 @@ import (
 	"TaxiTorrent/Protocols"
 	"TaxiTorrent/util"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -103,7 +104,6 @@ func main() {
 								go sendRequestConcurrent(nodeIp, connection, &wg)
 							}
 							wg.Wait()
-							fmt.Println("Download finished (almost)")
 							//TODO: Verificar se todos os blocos estão downloaded
 
 						} else {
@@ -276,7 +276,7 @@ func handleUDPpacket(connInfo Protocols.UDPConnectionInfo, packet []byte) {
 		data := new(Protocols.Data)
 		util.DecodeToStruct(t.Payload, data)
 
-		fmt.Println("Received a Data Packet", data)
+		writeDataToFile(data)
 	}
 }
 
@@ -348,38 +348,43 @@ retryloop:
 	}
 }
 
-func waitForAck(udpconn net.Conn, ackReceived chan bool) {
-	buffer := make([]byte, 1024)
-	n, err := udpconn.Read(buffer)
+func makeHandshake1(node Protocols.Seeder, fileName string, fileSize uint64, nBlocks int, blocksOffset int, dataBase *map[string]Connection, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	udpAddr, err := net.ResolveUDPAddr("udp", node.Ip.String()+":"+CLIENT_UDPPORT)
 	if err != nil {
-		fmt.Println("Error reading from UDP connection:", err)
-		ackMutex.Lock()
-		closeOnce.Do(func() {
-			close(ackReceived)
-		})
-		ackMutex.Unlock()
+		fmt.Println("Error resolving UDP address:", err)
 		return
 	}
 
-	packet := buffer[:n]
-	t := new(Protocols.TaxiProtocol)
-	util.DecodeToStruct(packet, t)
+	udpconn := connectToSeeder(udpAddr)
+	defer udpconn.Close()
 
-	if t.Id == 1 {
-		fmt.Println("ACK received")
-		ackMutex.Lock()
-		closeOnce.Do(func() {
-			close(ackReceived)
-		})
-		ackMutex.Unlock()
-	} else {
-		fmt.Println("Unexpected packet received. Closing connection.")
-		ackMutex.Lock()
-		closeOnce.Do(func() {
-			close(ackReceived)
-		})
-		ackMutex.Unlock()
+	fmt.Println("P2P connection established with", udpAddr)
+
+	sendInitialSynPacket(fileName, udpconn)
+
+	ackReceived = make(chan bool)
+
+	var retryOnce sync.Once
+	retryFunc := func() {
+		fmt.Println("Resending SynGate")
+		sendInitialSynPacket(fileName, udpconn)
 	}
+
+	for i := 0; i < 3; i++ {
+		select {
+		case <-ackReceived:
+			fmt.Println("ACK received")
+			return
+		case <-time.After(1 * time.Second):
+			retryOnce.Do(func() {
+				time.AfterFunc(1*time.Second, retryFunc)
+			})
+		}
+	}
+
+	fmt.Println("Closing connection, no ACK received.")
 }
 
 func sendInitialSynPacket(fileName string, udpconn *net.UDPConn) *net.UDPConn {
@@ -471,21 +476,18 @@ func sendPacketOverUDP(addr net.UDPAddr, data []byte) error {
 	return nil
 }
 
-func sendPacketOverUDPWithPort(addr net.UDPAddr, data []byte) error {
-	udpAddr, err := net.ResolveUDPAddr("udp", addr.String())
-	fmt.Println(udpAddr)
-	if err != nil {
-		return err
-	}
-	conn, err := net.DialUDP("udp", nil, udpAddr)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
+func writeDataToFile(data *Protocols.Data) {
 
-	_, err = conn.Write(data)
-	if err != nil {
-		return err
-	}
-	return nil
+	download_path := fmt.Sprintf("%s/%s", SEEDSDIR, data.Filename)
+	file, _ := os.Create(download_path)
+
+	defer file.Close()
+
+	writeBlockToFile(file, (*data).Block, int64(data.BlockId)*BLOCKSIZE)
+
+}
+
+func writeBlockToFile(file *os.File, block []byte, offset int64) {
+	file.Seek(offset, io.SeekStart)
+	file.Write(block)
 }
