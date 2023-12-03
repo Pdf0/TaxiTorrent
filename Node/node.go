@@ -348,45 +348,6 @@ retryloop:
 	}
 }
 
-func makeHandshake1(node Protocols.Seeder, fileName string, fileSize uint64, nBlocks int, blocksOffset int, dataBase *map[string]Connection, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	udpAddr, err := net.ResolveUDPAddr("udp", node.Ip.String()+":"+CLIENT_UDPPORT)
-	if err != nil {
-		fmt.Println("Error resolving UDP address:", err)
-		return
-	}
-
-	udpconn := connectToSeeder(udpAddr)
-	defer udpconn.Close()
-
-	fmt.Println("P2P connection established with", udpAddr)
-
-	sendInitialSynPacket(fileName, udpconn)
-
-	ackReceived = make(chan bool)
-
-	var retryOnce sync.Once
-	retryFunc := func() {
-		fmt.Println("Resending SynGate")
-		sendInitialSynPacket(fileName, udpconn)
-	}
-
-	for i := 0; i < 3; i++ {
-		select {
-		case <-ackReceived:
-			fmt.Println("ACK received")
-			return
-		case <-time.After(1 * time.Second):
-			retryOnce.Do(func() {
-				time.AfterFunc(1*time.Second, retryFunc)
-			})
-		}
-	}
-
-	fmt.Println("Closing connection, no ACK received.")
-}
-
 func sendInitialSynPacket(fileName string, udpconn *net.UDPConn) *net.UDPConn {
 
 	synGate := Protocols.CreateSynGates(net.IP(CLIENT_HOST), fileName)
