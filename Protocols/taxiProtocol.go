@@ -13,12 +13,12 @@ import (
 */
 
 type UDPConnectionInfo struct {
-    LocalAddr  string
-    RemoteAddr string
+    LocalAddr  net.UDPAddr
+    RemoteAddr net.UDPAddr
 }
 
 type TaxiProtocol struct {
-    ConnInfo UDPConnectionInfo
+    SenderIp string
     Id       uint8
     Payload  []byte
 }
@@ -29,10 +29,12 @@ type SynGates struct {
 }
 
 type Request struct {
-	Blocklist []int
+	Filename string
+	BlocksBF []bool
 }
 
 type Data struct {
+	Filename string
 	BlockId int
 	Block   []byte
 	Hash    string
@@ -46,12 +48,5 @@ func CreateSynGates(ip net.IP, fileName string) SynGates {
 	return SynGates{
 		ip,
 		fileName,
-	}
-}
-
-func GetUDPConnInfo(conn *net.UDPConn) UDPConnectionInfo {
-	return UDPConnectionInfo{
-		LocalAddr:  conn.LocalAddr().String(),
-		RemoteAddr: conn.RemoteAddr().String(),
 	}
 }

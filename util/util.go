@@ -102,11 +102,14 @@ func DirExists(path string) bool {
 	return false
 }
 
-func CreateListFromTo(from int, to int) []int {
-	list := make([]int, 0)
-
-	for i := from; i < to; i++ {
-		list = append(list, i)
+func CreateBitFieldFromTo(bitField []bool, from int, to int) []bool {
+	for i := 0; i <= len(bitField); i++ {
+		if from > i && i <= to {
+			bitField[i] = false
+		}
 	}
-	return list
+	newBitField := make([]bool, len(bitField))
+	copy(newBitField, bitField)
+
+	return newBitField
 }

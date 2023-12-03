@@ -36,11 +36,11 @@ func main() {
 		if err != nil {
 			fmt.Println("Error accepting: ", err.Error())
 		}
-		go processClient(connection, dataBase)
+		go processClient(connection, &dataBase)
 	}
 }
 
-func processClient(connection net.Conn, dataBase map[string]*Protocols.FileInfo) {
+func processClient(connection net.Conn, dataBase *map[string]*Protocols.FileInfo) {
 	defer connection.Close()
 	ip, port := util.GetTCPRemoteAddr(connection)
 	fullAddr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
@@ -76,7 +76,7 @@ func processClient(connection net.Conn, dataBase map[string]*Protocols.FileInfo)
 			}
 			InsertNodeInDataBase(dataBase, s.FileList, s.Ip, s.Port)
 			fmt.Println("Received: ", *s)
-			fmt.Println(dataBase)
+			fmt.Println(*dataBase)
 
 		case "update":
 			u := new(Protocols.Update)
@@ -91,7 +91,7 @@ func processClient(connection net.Conn, dataBase map[string]*Protocols.FileInfo)
 		case "list":
 			fmt.Println("ListRequest from ", fullAddr)
 			var fileList []string
-			for fileName := range dataBase {
+			for fileName := range *dataBase {
 				fileList = append(fileList, fileName)
 			}
 			lResponse := Protocols.ListResponse{FileList: fileList}
@@ -109,7 +109,7 @@ func processClient(connection net.Conn, dataBase map[string]*Protocols.FileInfo)
 			fmt.Println("GetRequest from ", fullAddr, ": ", gRequest)
 			var seedersList []Protocols.Seeder
 			var fileSize uint64
-			for fileName, fileInfo := range dataBase {
+			for fileName, fileInfo := range *dataBase {
 				if fileName == gRequest.FileName {
 					seedersList = Protocols.DeepCopySeeders(fileInfo.SeedersInfo)
 					fileSize = fileInfo.FileSize
@@ -125,34 +125,35 @@ func processClient(connection net.Conn, dataBase map[string]*Protocols.FileInfo)
 	}
 }
 
-func UpdateNode(dataBase map[string]*Protocols.FileInfo, files []Protocols.File, ip net.IP, port uint) {
+func UpdateNode(dataBase *map[string]*Protocols.FileInfo, files []Protocols.File, ip net.IP, port uint) {
 	DisconnectNode(dataBase, ip, port)
 	InsertNodeInDataBase(dataBase, files, ip, port)
 }
 
-func DisconnectNode(dataBase map[string]*Protocols.FileInfo, ip net.IP, port uint) {
-	for file, fileInfo := range dataBase {
-		dataBase[file].SeedersInfo = RemoveNodeFromList(fileInfo.SeedersInfo, ip)
-		if len(dataBase[file].SeedersInfo) == 0 {
-			delete(dataBase, file)
+func DisconnectNode(dataBase *map[string]*Protocols.FileInfo, ip net.IP, port uint) {
+	for file, fileInfo := range *dataBase {
+		(*dataBase)[file].SeedersInfo = RemoveNodeFromList(fileInfo.SeedersInfo, ip)
+		if len((*dataBase)[file].SeedersInfo) == 0 {
+			delete(*dataBase, file)
 		}
 	}
 }
 
-func InsertNodeInDataBase(dataBase map[string]*Protocols.FileInfo, files []Protocols.File, ip net.IP, port uint) {
+func InsertNodeInDataBase(dataBase *map[string]*Protocols.FileInfo, files []Protocols.File, ip net.IP, port uint) {
 	for _, file := range files {
 		node := Protocols.Seeder{
 			Ip:              ip,
 			Port:            port,
 			BlocksAvailable: file.Blocks,
 		}
-		if _, ok := dataBase[file.Name]; !ok {
-			dataBase[file.Name] = &Protocols.FileInfo{FileSize: uint64(file.Size), SeedersInfo: []Protocols.Seeder{node}}
+		if _, ok := (*dataBase)[file.Name]; !ok {
+			(*dataBase)[file.Name] = &Protocols.FileInfo{FileSize: uint64(file.Size), SeedersInfo: []Protocols.Seeder{node}}
 		} else {
-			if !Contains(dataBase[file.Name].SeedersInfo, node) {
-				dataBase[file.Name].SeedersInfo = append(dataBase[file.Name].SeedersInfo, node)
+			if !Contains((*dataBase)[file.Name].SeedersInfo, node) {
+				(*dataBase)[file.Name].SeedersInfo = append((*dataBase)[file.Name].SeedersInfo, node)
 			}
 		}
+		fmt.Println((*dataBase)[file.Name])
 	}
 }
 

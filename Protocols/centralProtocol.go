@@ -20,8 +20,7 @@ type FileInfo struct {
 type Seeder struct {
 	Ip     net.IP
 	Port   uint
-	BlocksAvailable []string
-	BlocksToDownload []bool
+	BlocksAvailable []bool
 }
 
 type SYN struct {
@@ -59,7 +58,7 @@ type File struct {
 	Name    string
 	Size    int64
 	NBlocks int64
-	Blocks  []string
+	Blocks  []bool
 }
 
 func FillCentral(central Central, packetType string, payload []byte) {
@@ -121,11 +120,10 @@ func GetNodeInfo(conn net.Conn, dirPath string) (net.IP, uint, int, []File) {
 			file.Name(),
 			fileInfo.Size(),
 			int64(GetFileNBlocks(fileInfo.Size())),
-			GetBlocksHashes(dirPath + "/" + file.Name()),
+			GetBlocksBitfield(dirPath + "/" + file.Name()),
 		}
 		fileCount++
 	}
-
 	return ip, port, fileCount, filesArray
 }
 
@@ -133,22 +131,14 @@ func GetFileNBlocks(fileSize int64) uint64 {
 	return uint64(math.Ceil((float64(fileSize)) / float64(BLOCKSIZE)))
 }
 
-func GetBlocksHashes(fp string) []string {
+func GetBlocksBitfield(fp string) []bool {
 	data, _ := os.ReadFile(fp)
-
-	var blocks []string
-
-	for i := 0; i < len(data); i += int(BLOCKSIZE) {
-		end := i + int(BLOCKSIZE)
-		if end > len(data) {
-			end = len(data)
-		}
-		block := data[i:end]
-		blocks = append(blocks, util.HashBlockMD5(block))
+	blocks := make([]bool, int(math.Ceil(float64(len(data)) / float64(BLOCKSIZE))))
+	for i := 0; i < len(blocks); i += 1 {
+		blocks[i] = true
 	}
 	return blocks
 }
-
 
 func DeepCopySeeders(seeders []Seeder) []Seeder {
 	newSeeder := make([]Seeder, len(seeders))
@@ -160,5 +150,5 @@ func DeepCopySeeders(seeders []Seeder) []Seeder {
 }
 
 func DeepCopySeeder(s Seeder) Seeder {
-	return Seeder{Ip: s.Ip, Port: s.Port, BlocksAvailable: s.BlocksAvailable, BlocksToDownload: s.BlocksToDownload}
+	return Seeder{Ip: s.Ip, Port: s.Port, BlocksAvailable: s.BlocksAvailable}
 }

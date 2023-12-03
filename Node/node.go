@@ -28,12 +28,13 @@ type Connection struct {
 	FileName         string
 	FileSize         uint64 // bytes
 	BlocksDownloaded []byte
-	BlocksToDownload []int
+	BlocksToDownload []bool
 }
 
 var CLIENT_HOST string
 var SEEDSDIR string
 var USERNAME string
+var ackReceived chan bool
 var ackMutex sync.Mutex
 var closeOnce sync.Once
 
@@ -99,10 +100,10 @@ func main() {
 							var wg sync.WaitGroup
 							for nodeIp, connection := range dataBase {
 								wg.Add(1)
-								go getBlocksFromNode(nodeIp, connection, &wg)
+								go sendRequestConcurrent(nodeIp, connection, &wg)
 							}
 							wg.Wait()
-
+							fmt.Println("Download finished (almost)")
 							//TODO: Verificar se todos os blocos estão downloaded
 
 						} else {
@@ -204,7 +205,6 @@ func CreateSyn(conn net.Conn) Protocols.SYN {
 
 	ip, port, nFiles, files := Protocols.GetNodeInfo(conn, SEEDSDIR)
 	syn := Protocols.CreateSyn(USERNAME, ip, port, nFiles, files)
-
 	return syn
 }
 
@@ -241,30 +241,48 @@ func Listen() {
 		packet := buffer[:n]
 		fmt.Println("Received data from ", clientAddr)
 
-		handleUDPpacket(conn, packet)
+		go handleUDPpacket(Protocols.UDPConnectionInfo{LocalAddr: *serverAddr, RemoteAddr: *clientAddr}, packet)
 	}
 }
 
-func handleUDPpacket(conn *net.UDPConn, packet []byte) {
+func handleUDPpacket(connInfo Protocols.UDPConnectionInfo, packet []byte) {
 	t := new(Protocols.TaxiProtocol)
 	util.DecodeToStruct(packet, t)
 
+	// Syn
 	if t.Id == 0 {
 
-		udpAddr, _ := net.ResolveUDPAddr("udp", t.ConnInfo.LocalAddr)
+		taxiAck := createAck(connInfo)
+		sendPacketOverUDP(connInfo.RemoteAddr, util.EncodeToBytes(taxiAck))
 
-		fmt.Println(udpAddr)
-		taxiAck := createAck(t.ConnInfo)
-		_, err := conn.WriteToUDP(util.EncodeToBytes(taxiAck), udpAddr)
-		util.CheckErr(err)
+		fmt.Println("Ack sent to", connInfo.RemoteAddr.String())
+		// Ack
+	} else if t.Id == 1 {
+		fmt.Println("ACK received")
+		ackMutex.Lock()
+		closeOnce.Do(func() {
+			close(ackReceived)
+		})
+		ackMutex.Unlock()
+		// Request
+	} else if t.Id == 2 {
+		request := new(Protocols.Request)
+		util.DecodeToStruct(t.Payload, request)
 
-		fmt.Println("Ack sent to", t.ConnInfo.RemoteAddr)
+		fmt.Println("Received a Request: ", request)
+		handleRequest(connInfo, request)
+		// Data
+	} else if t.Id == 3 {
+		data := new(Protocols.Data)
+		util.DecodeToStruct(t.Payload, data)
+
+		fmt.Println("Received a Data Packet", data)
 	}
 }
 
 func createAck(connInfo Protocols.UDPConnectionInfo) Protocols.TaxiProtocol {
 	return Protocols.TaxiProtocol{
-		ConnInfo: connInfo,
+		SenderIp: connInfo.LocalAddr.IP.String(),
 		Id:       uint8(1),
 	}
 }
@@ -298,8 +316,7 @@ func makeHandshake(node Protocols.Seeder, fileName string, fileSize uint64, nBlo
 
 	sendInitialSynPacket(fileName, udpconn)
 
-	ackReceived := make(chan bool)
-	go waitForAck(udpconn, ackReceived)
+	ackReceived = make(chan bool)
 
 	retries := 3
 	ackReceivedFlag := false
@@ -321,7 +338,7 @@ retryloop:
 		udpconn.Close()
 		return
 	}
-	blocksToDownload := util.CreateListFromTo(blocksOffset, blocksOffset+nBlocks)
+	blocksToDownload := util.CreateBitFieldFromTo(node.BlocksAvailable, blocksOffset, blocksOffset+nBlocks)
 	(*dataBase)[node.Ip.String()] = Connection{
 		udpconn,
 		fileName,
@@ -368,7 +385,7 @@ func waitForAck(udpconn net.Conn, ackReceived chan bool) {
 func sendInitialSynPacket(fileName string, udpconn *net.UDPConn) *net.UDPConn {
 
 	synGate := Protocols.CreateSynGates(net.IP(CLIENT_HOST), fileName)
-	taxi := Protocols.TaxiProtocol{ConnInfo: Protocols.GetUDPConnInfo(udpconn), Id: 0, Payload: util.EncodeToBytes(synGate)}
+	taxi := Protocols.TaxiProtocol{SenderIp: getPublicIP(), Id: 0, Payload: util.EncodeToBytes(synGate)}
 	_, err := udpconn.Write(util.EncodeToBytes(taxi))
 
 	util.CheckErr(err)
@@ -378,23 +395,97 @@ func sendInitialSynPacket(fileName string, udpconn *net.UDPConn) *net.UDPConn {
 	return udpconn
 }
 
-func getBlocksFromNode(nodeIp string, connection Connection, wg *sync.WaitGroup) {
+func sendRequestConcurrent(nodeIP string, connection Connection, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for len(connection.BlocksToDownload) > 0 {
-		sendRequest(nodeIp, connection)
-	}
+	sendRequest(nodeIP, connection)
 }
 
 func sendRequest(nodeIP string, connection Connection) {
 
-	request := Protocols.Request{Blocklist: connection.BlocksToDownload}
+	request := Protocols.Request{Filename: connection.FileName, BlocksBF: connection.BlocksToDownload}
 	taxi := Protocols.TaxiProtocol{
-		ConnInfo: Protocols.GetUDPConnInfo(connection.conn),
-		Id: 2,
-		Payload: util.EncodeToBytes(request),
+		SenderIp: getPublicIP(),
+		Id:       2,
+		Payload:  util.EncodeToBytes(request),
 	}
-
 	_, err := connection.conn.Write(util.EncodeToBytes(taxi))
 
 	util.CheckErr(err)
+}
+
+func handleRequest(connInfo Protocols.UDPConnectionInfo, request *Protocols.Request) {
+
+	for i, value := range request.BlocksBF {
+		if value {
+			data := createDataPacket(request.Filename, i)
+			sendBlock(data, connInfo)
+		}
+	}
+}
+
+func sendBlock(data Protocols.Data, connInfo Protocols.UDPConnectionInfo) {
+	taxi := Protocols.TaxiProtocol{
+		SenderIp: connInfo.LocalAddr.String(),
+		Id:       3,
+		Payload:  util.EncodeToBytes(data),
+	}
+	sendPacketOverUDP(connInfo.RemoteAddr, util.EncodeToBytes(taxi))
+}
+
+func createDataPacket(file string, blockId int) Protocols.Data {
+
+	startIndex := int64(blockId * BLOCKSIZE)
+	fp := fmt.Sprintf("%s/%s", SEEDSDIR, file)
+
+	fileData, _ := os.Open(fp)
+
+	defer fileData.Close()
+
+	fileData.Seek(startIndex, 0)
+	buffer := make([]byte, BLOCKSIZE)
+	fileData.Read(buffer)
+
+	return Protocols.Data{
+		Filename: file,
+		BlockId:  blockId,
+		Block:    buffer,
+		Hash:     util.HashBlockMD5(buffer),
+	}
+}
+
+func sendPacketOverUDP(addr net.UDPAddr, data []byte) error {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr.IP.String()+":"+CLIENT_UDPPORT)
+	if err != nil {
+		return err
+	}
+	conn, err := net.DialUDP("udp", nil, udpAddr)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Write(data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func sendPacketOverUDPWithPort(addr net.UDPAddr, data []byte) error {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr.String())
+	fmt.Println(udpAddr)
+	if err != nil {
+		return err
+	}
+	conn, err := net.DialUDP("udp", nil, udpAddr)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Write(data)
+	if err != nil {
+		return err
+	}
+	return nil
 }
