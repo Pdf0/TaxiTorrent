@@ -100,18 +100,21 @@ func main() {
 							gResponse := new(Protocols.GetResponse)
 							commsListandGet(trackerConn, "getrequest", gRequest, gResponse)
 
-							//TODO: Remover Handshake
+							fmt.Println(Protocols.QueryUsername(gResponse.Seeders[0].Ip.String()))
 
-							sendInitialSynPackets(gResponse, file, &dataBase)
+							/*
+								//TODO: Remover Handshake
 
-							createFile(file, gResponse.Size)
+								sendInitialSynPackets(gResponse, file, &dataBase)
 
-							for nodeIp, connection := range dataBase {
-								nodeAddr, _ := net.ResolveUDPAddr("udp", nodeIp+":"+CLIENT_UDPPORT)
-								go sendRequest(nodeAddr, connection)
-							}
-							//TODO: Verificar se todos os blocos estão downloaded. Se não, enviar os que faltam
+								createFile(file, gResponse.Size)
 
+								for nodeIp, connection := range dataBase {
+									nodeAddr, _ := net.ResolveUDPAddr("udp", nodeIp+":"+CLIENT_UDPPORT)
+									go sendRequest(nodeAddr, connection)
+								}
+								//TODO: Verificar se todos os blocos estão downloaded. Se não, enviar os que faltam
+							*/
 						} else {
 							fmt.Println("Please Specify an argument")
 							fmt.Println("> get [file]")

@@ -13,13 +13,14 @@ const (
 )
 
 type FileInfo struct {
-	FileSize uint64
+	FileSize    uint64
 	SeedersInfo []Seeder
 }
 
 type Seeder struct {
-	Ip     net.IP
-	Port   uint
+	Ip              net.IP
+	Username        string
+	Port            uint
 	BlocksAvailable []bool
 }
 
@@ -51,7 +52,7 @@ type ListResponse struct {
 
 type BlockUpdate struct {
 	Filename string
-	BlockId int
+	BlockId  int
 }
 
 type Central struct {
@@ -138,7 +139,7 @@ func GetFileNBlocks(fileSize int64) uint64 {
 
 func GetBlocksBitfield(fp string) []bool {
 	data, _ := os.ReadFile(fp)
-	blocks := make([]bool, int(math.Ceil(float64(len(data)) / float64(BLOCKSIZE))))
+	blocks := make([]bool, int(math.Ceil(float64(len(data))/float64(BLOCKSIZE))))
 	for i := 0; i < len(blocks); i += 1 {
 		blocks[i] = true
 	}
@@ -156,4 +157,25 @@ func DeepCopySeeders(seeders []Seeder) []Seeder {
 
 func DeepCopySeeder(s Seeder) Seeder {
 	return Seeder{Ip: s.Ip, Port: s.Port, BlocksAvailable: s.BlocksAvailable}
+}
+
+func QueryUsername(username string) []string {
+	ips, err := net.LookupHost(username)
+	if err != nil {
+		return nil
+	}
+	return ips
+}
+
+func QueryIp(ip net.IP) string {
+	names, err := net.LookupAddr(ip.String())
+	if err != nil {
+		return ""
+	}
+
+	if len(names) > 0 {
+		return names[0]
+	}
+
+	return ""
 }

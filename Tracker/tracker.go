@@ -47,6 +47,8 @@ func processClient(connection net.Conn, dataBase *map[string]*Protocols.FileInfo
 	fullAddr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
 	fmt.Println("Node connected (" + fullAddr + ")")
 
+	username := Protocols.QueryIp(ip)
+
 	for {
 		buffer := make([]byte, 1024)
 
@@ -75,7 +77,7 @@ func processClient(connection net.Conn, dataBase *map[string]*Protocols.FileInfo
 				fmt.Println("Error decoding SYN packet:", err.Error())
 				continue
 			}
-			InsertNodeInDataBase(dataBase, s.FileList, s.Ip, s.Port)
+			InsertNodeInDataBase(dataBase, s.FileList, s.Ip, s.Port, s.Username)
 			fmt.Println("Received: ", *s)
 			fmt.Println(*dataBase)
 
@@ -85,7 +87,7 @@ func processClient(connection net.Conn, dataBase *map[string]*Protocols.FileInfo
 				fmt.Println("Error decoding Update packet:", err.Error())
 				continue
 			}
-			UpdateNode(dataBase, u.FileList, ip, port)
+			UpdateNode(dataBase, u.FileList, ip, port, username)
 			fmt.Println("Updated Node (" + fullAddr + ")")
 			fmt.Println(dataBase)
 
@@ -134,9 +136,9 @@ func processClient(connection net.Conn, dataBase *map[string]*Protocols.FileInfo
 	}
 }
 
-func UpdateNode(dataBase *map[string]*Protocols.FileInfo, files []Protocols.File, ip net.IP, port uint) {
+func UpdateNode(dataBase *map[string]*Protocols.FileInfo, files []Protocols.File, ip net.IP, port uint, username string) {
 	DisconnectNode(dataBase, ip, port)
-	InsertNodeInDataBase(dataBase, files, ip, port)
+	InsertNodeInDataBase(dataBase, files, ip, port, username)
 }
 
 func DisconnectNode(dataBase *map[string]*Protocols.FileInfo, ip net.IP, port uint) {
@@ -148,10 +150,11 @@ func DisconnectNode(dataBase *map[string]*Protocols.FileInfo, ip net.IP, port ui
 	}
 }
 
-func InsertNodeInDataBase(dataBase *map[string]*Protocols.FileInfo, files []Protocols.File, ip net.IP, port uint) {
+func InsertNodeInDataBase(dataBase *map[string]*Protocols.FileInfo, files []Protocols.File, ip net.IP, port uint, username string) {
 	for _, file := range files {
 		node := Protocols.Seeder{
 			Ip:              ip,
+			Username:        username,
 			Port:            port,
 			BlocksAvailable: file.Blocks,
 		}
