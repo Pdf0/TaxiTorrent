@@ -100,7 +100,7 @@ func main() {
 							gResponse := new(Protocols.GetResponse)
 							commsListandGet(trackerConn, "getrequest", gRequest, gResponse)
 
-							fmt.Println(Protocols.QueryUsername(gResponse.Seeders[0].Ip.String()))
+							fmt.Println(Protocols.QueryUsername("DEI PRINT HELLO??" + gResponse.Seeders[0].Ip.String()))
 
 							/*
 								//TODO: Remover Handshake
