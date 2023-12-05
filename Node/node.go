@@ -98,7 +98,12 @@ func main() {
 
 							gRequest := Protocols.GetRequest{FileName: file}
 							gResponse := new(Protocols.GetResponse)
+
+							fmt.Printf("Boa ate os comemos")
+
 							commsListandGet(trackerConn, "getrequest", gRequest, gResponse)
+
+							fmt.Println("duro")
 
 							fmt.Println(Protocols.QueryUsername("DEI PRINT HELLO??" + gResponse.Seeders[0].Ip.String()))
 
