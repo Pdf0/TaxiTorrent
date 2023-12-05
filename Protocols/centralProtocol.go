@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	BLOCKSIZE = 256
+	BLOCKSIZE = 1024
 )
 
 type FileInfo struct {
@@ -47,6 +47,11 @@ type GetResponse struct {
 
 type ListResponse struct {
 	FileList []string
+}
+
+type BlockUpdate struct {
+	Filename string
+	BlockId int
 }
 
 type Central struct {

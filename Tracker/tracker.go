@@ -5,6 +5,7 @@ import (
 	"TaxiTorrent/util"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"reflect"
 )
@@ -13,7 +14,7 @@ const (
 	SERVER_HOST = "10.4.4.2" // servidor2
 	SERVER_PORT = "9090"
 	SERVER_TYPE = "tcp"
-	BLOCKSIZE   = 256
+	BLOCKSIZE   = 1024
 )
 
 func main() {
@@ -121,6 +122,14 @@ func processClient(connection net.Conn, dataBase *map[string]*Protocols.FileInfo
 			_, err := connection.Write(util.EncodeToBytes(central))
 			util.CheckErr(err)
 			fmt.Println("GetResponse to ", fullAddr, ": ", gResponse)
+		case "updateBlock":
+			bU := new(Protocols.BlockUpdate)
+			if err := util.DecodeToStruct(g.Payload, bU); err != nil {
+				fmt.Println("Error decoding Update packet:", err.Error())
+				continue
+			}
+			updateNodeBlock(dataBase, bU, ip, port)
+			fmt.Printf("Block %d received from node %s\n", bU.BlockId, ip.String())
 		}
 	}
 }
@@ -185,4 +194,23 @@ func RemoveNodeFromList(list []Protocols.Seeder, ip net.IP) []Protocols.Seeder {
 		}
 	}
 	return updatedList
+}
+
+func updateNodeBlock(dataBase *map[string]*Protocols.FileInfo, bU *Protocols.BlockUpdate, ip net.IP, port uint) {
+	nodeFound := false
+	for _, v := range (*dataBase)[bU.Filename].SeedersInfo {
+		if v.Ip.Equal(ip) {
+			v.BlocksAvailable[bU.BlockId] = true
+		}
+	}
+	if !nodeFound {
+		blocksBF := make([]bool, int(math.Ceil(float64((*dataBase)[bU.Filename].FileSize)/float64(BLOCKSIZE))))
+		blocksBF[bU.BlockId] = true
+		node := Protocols.Seeder{
+			Ip:              ip,
+			Port:            port,
+			BlocksAvailable: blocksBF,
+		}
+		(*dataBase)[bU.Filename].SeedersInfo = append((*dataBase)[bU.Filename].SeedersInfo, node)
+	}
 }

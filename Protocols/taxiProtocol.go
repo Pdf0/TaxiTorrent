@@ -9,7 +9,7 @@ import (
 - 1 - ack
 - 2 - request
 - 3 - data
-- 4 - maddy (missing)
+- 4 - finished
 */
 
 type UDPConnectionInfo struct {
@@ -38,10 +38,6 @@ type Data struct {
 	BlockId int
 	Block   []byte
 	Hash    string
-}
-
-type Maddy struct {
-	BlockId uint16
 }
 
 func CreateSynGates(ip net.IP, fileName string) SynGates {
