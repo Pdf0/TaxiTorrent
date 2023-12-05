@@ -88,37 +88,37 @@ func main() {
 						palavras := strings.Fields(command)
 
 						if len(palavras) == 2 {
-
-							args := strings.Fields(command)
-
-							//FIX: Check if args[1] exists, for example: "> get "
-							file := args[1]
-
-							//TODO: Verificar se o Node já tem o ficheiro que está a pedir
-
-							gRequest := Protocols.GetRequest{FileName: file}
-							gResponse := new(Protocols.GetResponse)
-
-							fmt.Printf("Boa ate os comemos")
-
-							commsListandGet(trackerConn, "getrequest", gRequest, gResponse)
-
-							fmt.Println("duro")
-
-							fmt.Println(Protocols.QueryUsername("DEI PRINT HELLO??" + gResponse.Seeders[0].Ip.String()))
-
+							fmt.Println("AQUI VAI O MEU IP: " + CLIENT_HOST)
 							/*
-								//TODO: Remover Handshake
+								args := strings.Fields(command)
 
-								sendInitialSynPackets(gResponse, file, &dataBase)
+								//FIX: Check if args[1] exists, for example: "> get "
+								file := args[1]
 
-								createFile(file, gResponse.Size)
+								//TODO: Verificar se o Node já tem o ficheiro que está a pedir
 
-								for nodeIp, connection := range dataBase {
-									nodeAddr, _ := net.ResolveUDPAddr("udp", nodeIp+":"+CLIENT_UDPPORT)
-									go sendRequest(nodeAddr, connection)
-								}
-								//TODO: Verificar se todos os blocos estão downloaded. Se não, enviar os que faltam
+								gRequest := Protocols.GetRequest{FileName: file}
+								gResponse := new(Protocols.GetResponse)
+
+								fmt.Printf("Boa ate os comemos")
+
+								commsListandGet(trackerConn, "getrequest", gRequest, gResponse)
+
+								fmt.Println("duro")
+
+								fmt.Println(Protocols.QueryUsername("DEI PRINT HELLO??" + gResponse.Seeders[0].Ip.String()))
+
+									//TODO: Remover Handshake
+
+									sendInitialSynPackets(gResponse, file, &dataBase)
+
+									createFile(file, gResponse.Size)
+
+									for nodeIp, connection := range dataBase {
+										nodeAddr, _ := net.ResolveUDPAddr("udp", nodeIp+":"+CLIENT_UDPPORT)
+										go sendRequest(nodeAddr, connection)
+									}
+									//TODO: Verificar se todos os blocos estão downloaded. Se não, enviar os que faltam
 							*/
 						} else {
 							fmt.Println("Please Specify an argument")
