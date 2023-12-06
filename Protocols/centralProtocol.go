@@ -159,23 +159,23 @@ func DeepCopySeeder(s Seeder) Seeder {
 	return Seeder{Ip: s.Ip, Port: s.Port, BlocksAvailable: s.BlocksAvailable}
 }
 
-func QueryUsername(username string) []string {
-	ips, err := net.LookupHost(username)
+func QueryUsername(username string) (string, error) {
+	ips, err := net.LookupHost(username + ".taxitorrent.local")
 	if err != nil {
-		return nil
+		return "", err
 	}
-	return ips
+	return ips[0], err
 }
 
-func QueryIp(ip net.IP) string {
+func QueryIp(ip net.IP) (string, error) {
 	names, err := net.LookupAddr(ip.String())
 	if err != nil {
-		return ""
+		return "", err
 	}
 
 	if len(names) > 0 {
-		return names[0]
+		return names[0], err
 	}
 
-	return ""
+	return "", err
 }
