@@ -3,7 +3,11 @@ package main
 import (
 	"TaxiTorrent/Protocols"
 	"TaxiTorrent/util"
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
+	"log"
 	"math"
 	"net"
 	"os"
@@ -42,12 +46,13 @@ var SEEDSDIR string
 var USERNAME string
 var trackerConn net.Conn
 var ackReceived chan bool
+var dataBaseMutex sync.Mutex
+var trackerConnMutex sync.Mutex
 var ackMutex sync.Mutex
 var closeOnce sync.Once
 
 func main() {
 
-	CLIENT_HOST = getPublicIP()
 	dataBase := createDataBase()
 
 	if len(os.Args) == 3 {
@@ -58,6 +63,8 @@ func main() {
 			SEEDSDIR = os.Args[1]
 			USERNAME = os.Args[2]
 
+      CLIENT_HOST, _ = Protocols.QueryUsername(USERNAME)
+      
 			trackerConn = connectToTracker()
 			defer trackerConn.Close()
 
@@ -88,38 +95,29 @@ func main() {
 						palavras := strings.Fields(command)
 
 						if len(palavras) == 2 {
-							fmt.Println("AQUI VAI O MEU IP: " + CLIENT_HOST)
-							/*
-								args := strings.Fields(command)
 
-								//FIX: Check if args[1] exists, for example: "> get "
-								file := args[1]
+							args := strings.Fields(command)
 
-								//TODO: Verificar se o Node já tem o ficheiro que está a pedir
+							//FIX: Check if args[1] exists, for example: "> get "
+							file := args[1]
 
-								gRequest := Protocols.GetRequest{FileName: file}
-								gResponse := new(Protocols.GetResponse)
+							//TODO: Verificar se o Node já tem o ficheiro que está a pedir
 
-								fmt.Printf("Boa ate os comemos")
+							gRequest := Protocols.GetRequest{FileName: file}
+							gResponse := new(Protocols.GetResponse)
+							commsListandGet(trackerConn, "getrequest", gRequest, gResponse)
 
-								commsListandGet(trackerConn, "getrequest", gRequest, gResponse)
+							//TODO: Remover Handshake
 
-								fmt.Println("duro")
+							sendInitialSynPackets(gResponse, file, &dataBase)
 
-								fmt.Println(Protocols.QueryUsername("DEI PRINT HELLO??" + gResponse.Seeders[0].Ip.String()))
+							createFile(file, gResponse.Size)
 
-									//TODO: Remover Handshake
+							for nodeIp, connection := range dataBase {
+								nodeAddr, _ := net.ResolveUDPAddr("udp", nodeIp+":"+CLIENT_UDPPORT)
+								go sendRequest(nodeAddr, connection)
+							}
 
-									sendInitialSynPackets(gResponse, file, &dataBase)
-
-									createFile(file, gResponse.Size)
-
-									for nodeIp, connection := range dataBase {
-										nodeAddr, _ := net.ResolveUDPAddr("udp", nodeIp+":"+CLIENT_UDPPORT)
-										go sendRequest(nodeAddr, connection)
-									}
-									//TODO: Verificar se todos os blocos estão downloaded. Se não, enviar os que faltam
-							*/
 						} else {
 							fmt.Println("Please Specify an argument")
 							fmt.Println("> get [file]")
@@ -204,7 +202,7 @@ func commsListandGet(conn net.Conn, requestType string, requestData interface{},
 	_, err := conn.Write(util.EncodeToBytes(packet))
 	util.CheckErr(err)
 
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, 2048)
 	mLen, _ := conn.Read(buffer)
 
 	g := new(Protocols.Central)
@@ -243,25 +241,39 @@ func Listen(dataBase *map[string]Connection) {
 	}
 	defer conn.Close()
 
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, 2024)
 
 	for {
 		n, clientAddr, err := conn.ReadFromUDP(buffer)
 		if err != nil {
-			fmt.Println("Error reading from connection:", err)
-			continue
+			if errors.Is(err, io.EOF) {
+				break
+			} else {
+				log.Fatal(err)
+			}
 		}
 
-		packet := buffer[:n]
+		data := buffer[:n]
 
-		go handleUDPpacket(Protocols.UDPConnectionInfo{LocalAddr: *serverAddr, RemoteAddr: *clientAddr}, packet, dataBase)
+		receivedChecksum := data[n-16:]
+		packet := data[:n-16]
+
+		fmt.Println("Received packet from", clientAddr.String())
+		if bytes.Equal(util.HashBlockMD5(packet), receivedChecksum) {
+			fmt.Println("Packet intact")
+			ch := make(chan byte, 1)
+			go handleUDPpacket(Protocols.UDPConnectionInfo{LocalAddr: *serverAddr, RemoteAddr: *clientAddr}, packet, n, dataBase, ch)
+			<-ch
+		} else {
+			fmt.Println("Packet corrupted")
+		}
+
 	}
 }
 
-func handleUDPpacket(connInfo Protocols.UDPConnectionInfo, packet []byte, dataBase *map[string]Connection) {
+func handleUDPpacket(connInfo Protocols.UDPConnectionInfo, packet []byte, packetSize int, dataBase *map[string]Connection, ch chan byte) {
 	t := new(Protocols.TaxiProtocol)
 	util.DecodeToStruct(packet, t)
-
 	// Syn
 	if t.Id == 0 {
 
@@ -290,23 +302,30 @@ func handleUDPpacket(connInfo Protocols.UDPConnectionInfo, packet []byte, dataBa
 		util.DecodeToStruct(t.Payload, data)
 		fmt.Println("Received a block")
 
-		if verifyBlockHash(data.Block, data.Hash) {
-			fmt.Println("Block validated")
-			updateDataBaseBF(dataBase, connInfo.RemoteAddr.IP.String(), data.BlockId)
-			fmt.Println("DataBase updated")
-			writeDataToFile(data, (*dataBase)[connInfo.RemoteAddr.IP.String()].BlockLocks)
-			fmt.Println("Wrote block in file")
-			updateTracker(data.Filename, data.BlockId)
-			fmt.Println("Block updated to Tracker")
+		if verifyBlockHashString(data.Block, data.Hash) {
+			fmt.Println("Block hash verified")
+			if !checkIfHasBlock(dataBase, data, connInfo) {
+				updateDataBaseBF(dataBase, connInfo.RemoteAddr.IP.String(), data.BlockId)
+				writeDataToFile(data, (*dataBase)[connInfo.RemoteAddr.IP.String()].BlockLocks)
+				updateTracker(data.Filename, data.BlockId)
+			}
+		} else {
+			fmt.Println("Block hash not verified")
 		}
+		// Finish
 	} else if t.Id == 4 {
 		fmt.Println("Received finish from", connInfo.RemoteAddr)
 		if blocksRemainingFromNode(dataBase, connInfo.RemoteAddr.IP.String()) {
+			fmt.Println("BLOCKS MISSING")
+			time.Sleep(500 * time.Millisecond)
 			sendRequest(&connInfo.RemoteAddr, (*dataBase)[connInfo.RemoteAddr.IP.String()])
 		} else {
 			delete(*dataBase, connInfo.RemoteAddr.IP.String())
 		}
+	} else {
+		fmt.Println("Invalid TaxiProtocol ID")
 	}
+	ch <- 1
 }
 
 func createAck(connInfo Protocols.UDPConnectionInfo) Protocols.TaxiProtocol {
@@ -323,12 +342,9 @@ func createDataBase() map[string]Connection {
 func sendInitialSynPackets(gResponse *Protocols.GetResponse, fileName string, dataBase *map[string]Connection) {
 
 	//Algoritmo de distribuição de blocos (Para já só distribui os blocos continua e uniformente)
-	fmt.Println("FILE SIZE:", gResponse.Size)
 	totalBlocks := int(math.Ceil(float64(gResponse.Size) / BLOCKSIZE))
 	blocksPerNode := totalBlocks / len(gResponse.Seeders)
 	blocksOffset := 0
-	fmt.Println("Total Blocks:", totalBlocks)
-	fmt.Println("Blocks per node:", blocksPerNode)
 	var wg sync.WaitGroup
 	for _, node := range gResponse.Seeders {
 		wg.Add(1)
@@ -373,7 +389,6 @@ retryloop:
 		return
 	}
 	blocksToDownload := util.CreateBitFieldFromTo(&node.BlocksAvailable, blocksOffset, blocksOffset+nBlocks)
-	fmt.Println("LEN:", len(blocksToDownload))
 	(*dataBase)[node.Ip.String()] = Connection{
 		udpconn,
 		fileName,
@@ -387,7 +402,11 @@ func sendInitialSynPacket(fileName string, udpconn *net.UDPConn) *net.UDPConn {
 
 	synGate := Protocols.CreateSynGates(net.IP(CLIENT_HOST), fileName)
 	taxi := Protocols.TaxiProtocol{SenderIp: getPublicIP(), Id: 0, Payload: util.EncodeToBytes(synGate)}
-	_, err := udpconn.Write(util.EncodeToBytes(taxi))
+
+	taxibytes := util.EncodeToBytes(taxi)
+	hash := util.HashBlockMD5(taxibytes)
+	packet := append(taxibytes, hash...)
+	_, err := udpconn.Write(packet)
 
 	util.CheckErr(err)
 
@@ -415,6 +434,7 @@ func handleRequest(connInfo Protocols.UDPConnectionInfo, request *Protocols.Requ
 			sendBlock(data, connInfo)
 		}
 	}
+	sendFinish(connInfo)
 }
 
 func sendBlock(data Protocols.Data, connInfo Protocols.UDPConnectionInfo) {
@@ -437,13 +457,17 @@ func createDataPacket(file string, blockId int) Protocols.Data {
 
 	fileData.Seek(startIndex, 0)
 	buffer := make([]byte, BLOCKSIZE)
-	fileData.Read(buffer)
-
+	n, err := fileData.Read(buffer)
+	if err != nil {
+		fmt.Println("Error reading file:", err)
+		return Protocols.Data{}
+	}
+	hash := util.HashBlockMD5String(buffer[:n])
 	return Protocols.Data{
 		Filename: file,
 		BlockId:  blockId,
-		Block:    buffer,
-		Hash:     util.HashBlockMD5(buffer),
+		Block:    buffer[:n],
+		Hash:     hash,
 	}
 }
 
@@ -458,14 +482,19 @@ func sendPacketOverUDP(addr net.UDPAddr, data []byte) error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Write(data)
+	hash := util.HashBlockMD5(data)
+	packet := append(data, hash...)
+	_, err = conn.Write(packet)
+
 	if err != nil {
+		fmt.Println("Error sending packet:", err)
 		return err
 	}
 	return nil
 }
 
 func writeDataToFile(data *Protocols.Data, blockLocks *BlockLocks) {
+	fmt.Printf("[BLOCK %d]writeDataToFile: Entered\n", data.BlockId)
 	downloadPath := fmt.Sprintf("%s/%s", SEEDSDIR, data.Filename)
 
 	file, err := os.OpenFile(downloadPath, os.O_RDWR|os.O_CREATE, 0755)
@@ -478,18 +507,29 @@ func writeDataToFile(data *Protocols.Data, blockLocks *BlockLocks) {
 	blockLocks.Lock(data.BlockId)
 	defer blockLocks.Unlock(data.BlockId)
 
-	if _, err := file.WriteAt(data.Block, int64(data.BlockId)*BLOCKSIZE); err != nil {
+	blockSize := len(data.Block)
+	if _, err := file.WriteAt(data.Block[:blockSize], int64(data.BlockId)*BLOCKSIZE); err != nil {
 		fmt.Println("Error writing block to file:", err)
 		return
 	}
+	fmt.Printf("[BLOCK %d]writeDataToFile: Entered\n", data.BlockId)
 }
 
 func updateDataBaseBF(dataBase *map[string]Connection, nodeIp string, blockId int) {
+	fmt.Printf("[BLOCK %d]updateDataBaseBF: Entered\n", blockId)
+	dataBaseMutex.Lock()
+	defer dataBaseMutex.Unlock()
 	(*dataBase)[nodeIp].BlocksToDownload[blockId] = false
+	fmt.Printf("[BLOCK %d]updateDataBaseBF: Exited\n", blockId)
 }
 
-func verifyBlockHash(block []byte, hashedBlock string) bool {
-	return hashedBlock == util.HashBlockMD5(block)
+func verifyBlockHashString(block []byte, hashedBlock string) bool {
+	return strings.Compare(hashedBlock, util.HashBlockMD5String(block)) == 0
+}
+
+func verifyBlockHash(data []byte, receivedChecksum []byte) bool {
+	calculatedHash := util.HashBlockMD5(data)
+	return bytes.Equal(calculatedHash, receivedChecksum)
 }
 
 func blocksRemainingFromNode(dataBase *map[string]Connection, nodeIp string) bool {
@@ -502,10 +542,20 @@ func blocksRemainingFromNode(dataBase *map[string]Connection, nodeIp string) boo
 }
 
 func updateTracker(fileName string, blockId int) {
+	fmt.Printf("[BLOCK %d]updateTracker: Entered\n", blockId)
+
+	trackerConnMutex.Lock()
+	defer trackerConnMutex.Unlock()
+
 	blockUpdate := Protocols.BlockUpdate{Filename: fileName, BlockId: blockId}
 	packet := Protocols.CreateCentral("updateBlock", util.EncodeToBytes(blockUpdate))
 	_, err := trackerConn.Write(util.EncodeToBytes(packet))
-	util.CheckErr(err)
+
+	if err != nil {
+		fmt.Println("Error updating tracker:", err)
+	}
+
+	fmt.Printf("[BLOCK %d]updateTracker: Exited\n", blockId)
 }
 
 func createFile(fileName string, fileSize uint64) {
@@ -533,4 +583,19 @@ func (bl *BlockLocks) Lock(block int) {
 
 func (bl *BlockLocks) Unlock(block int) {
 	bl.locks[block].Unlock()
+}
+
+func sendFinish(connInfo Protocols.UDPConnectionInfo) {
+	taxi := Protocols.TaxiProtocol{
+		SenderIp: connInfo.LocalAddr.String(),
+		Id:       4,
+	}
+	sendPacketOverUDP(connInfo.RemoteAddr, util.EncodeToBytes(taxi))
+}
+
+func checkIfHasBlock(dataBase *map[string]Connection, data *Protocols.Data, connInfo Protocols.UDPConnectionInfo) bool {
+	if !(*dataBase)[connInfo.RemoteAddr.IP.String()].BlocksToDownload[data.BlockId] {
+		return true
+	}
+	return false
 }

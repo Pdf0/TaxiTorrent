@@ -2,7 +2,6 @@ package util
 
 import (
 	"bytes"
-	"compress/gzip"
 	"crypto/md5"
 	"encoding/gob"
 	"encoding/hex"
@@ -21,31 +20,11 @@ func EncodeToBytes(i interface{}) []byte {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return Compress(buf.Bytes())
-}
-
-func Compress(s []byte) []byte {
-
-	zipbuf := bytes.Buffer{}
-	zipped := gzip.NewWriter(&zipbuf)
-	zipped.Write(s)
-	zipped.Close()
-	return zipbuf.Bytes()
-}
-
-func Decompress(s []byte) []byte {
-
-	rdr, _ := gzip.NewReader(bytes.NewReader(s))
-	data, err := io.ReadAll(rdr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	rdr.Close()
-	return data
+	return buf.Bytes()
 }
 
 func DecodeToStruct(s []byte, i interface{}) error {
-	dec := gob.NewDecoder(bytes.NewReader(Decompress(s)))
+	dec := gob.NewDecoder(bytes.NewReader(s))
 	err := dec.Decode(i)
 	if err != nil && err != io.EOF {
 		fmt.Println("Error decoding:", err.Error())
@@ -78,7 +57,13 @@ func GetTCPRemotePort(conn net.Conn) uint {
 	return uint(conn.RemoteAddr().(*net.TCPAddr).Port)
 }
 
-func HashBlockMD5(block []byte) string {
+func HashBlockMD5(block []byte) []byte {
+	hasher := md5.New()
+	hasher.Write(block)
+	return hasher.Sum(nil)
+}
+
+func HashBlockMD5String(block []byte) string {
 	hasher := md5.New()
 	hasher.Write(block)
 	hash := hasher.Sum(nil)
