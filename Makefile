@@ -1,4 +1,4 @@
-GOCMD = go
+GOCMD = /home/core/.asdf/installs/golang/1.21.2/go/bin/go
 
 all: build
 

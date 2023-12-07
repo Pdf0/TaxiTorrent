@@ -101,3 +101,15 @@ func DirExists(path string) bool {
 	}
 	return false
 }
+
+func CreateBitFieldFromTo(bitField *[]bool, from int, to int) []bool {
+	for i := 0; i <= len(*bitField); i++ {
+		if from > i && i <= to {
+			(*bitField)[i] = false
+		}
+	}
+	newBitField := make([]bool, len(*bitField))
+	copy(newBitField, *bitField)
+
+	return newBitField
+}

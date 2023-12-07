@@ -9,13 +9,19 @@ import (
 )
 
 const (
-	BLOCKSIZE = 256
+	BLOCKSIZE = 1024
 )
 
+type FileInfo struct {
+	FileSize    uint64
+	SeedersInfo []Seeder
+}
+
 type Seeder struct {
-	Ip     net.IP
-	Port   uint
-	Blocks []string
+	Ip              net.IP
+	Username        string
+	Port            uint
+	BlocksAvailable []bool
 }
 
 type SYN struct {
@@ -37,11 +43,16 @@ type GetRequest struct {
 
 type GetResponse struct {
 	Seeders []Seeder
-	Size uint32
+	Size    uint64
 }
 
 type ListResponse struct {
 	FileList []string
+}
+
+type BlockUpdate struct {
+	Filename string
+	BlockId  int
 }
 
 type Central struct {
@@ -50,10 +61,10 @@ type Central struct {
 }
 
 type File struct {
-	Name     string
-	Size     int64
-	NBlocks  int64
-	Blocks   []string
+	Name    string
+	Size    int64
+	NBlocks int64
+	Blocks  []bool
 }
 
 func FillCentral(central Central, packetType string, payload []byte) {
@@ -68,7 +79,7 @@ func CreateCentral(packetType string, payload []byte) Central {
 	}
 }
 
-func CreateEmptyCentral() Central {return Central{}}
+func CreateEmptyCentral() Central { return Central{} }
 
 func CreateSyn(user string, ip net.IP,
 	port uint, nFicheiros int, fileList []File) SYN {
@@ -115,30 +126,56 @@ func GetNodeInfo(conn net.Conn, dirPath string) (net.IP, uint, int, []File) {
 			file.Name(),
 			fileInfo.Size(),
 			int64(GetFileNBlocks(fileInfo.Size())),
-			GetBlocksHashes(dirPath + "/" + file.Name()),
+			GetBlocksBitfield(dirPath + "/" + file.Name()),
 		}
 		fileCount++
 	}
-
 	return ip, port, fileCount, filesArray
 }
 
 func GetFileNBlocks(fileSize int64) uint64 {
-	return uint64(math.Ceil((float64(fileSize))/float64(BLOCKSIZE)))
+	return uint64(math.Ceil((float64(fileSize)) / float64(BLOCKSIZE)))
 }
 
-func GetBlocksHashes(fp string) []string{
+func GetBlocksBitfield(fp string) []bool {
 	data, _ := os.ReadFile(fp)
-	
-	var blocks []string
-
-	for i := 0; i < len(data); i += int(BLOCKSIZE) {
-        end := i + int(BLOCKSIZE)
-        if end > len(data) {
-            end = len(data)
-        }
-        block := data[i:end]
-		blocks = append(blocks, util.HashBlockMD5(block))
-    }
+	blocks := make([]bool, int(math.Ceil(float64(len(data))/float64(BLOCKSIZE))))
+	for i := 0; i < len(blocks); i += 1 {
+		blocks[i] = true
+	}
 	return blocks
+}
+
+func DeepCopySeeders(seeders []Seeder) []Seeder {
+	newSeeder := make([]Seeder, len(seeders))
+
+	for i, seeder := range seeders {
+		newSeeder[i] = DeepCopySeeder(seeder)
+	}
+	return newSeeder
+}
+
+func DeepCopySeeder(s Seeder) Seeder {
+	return Seeder{Ip: s.Ip, Port: s.Port, BlocksAvailable: s.BlocksAvailable}
+}
+
+func QueryUsername(username string) (string, error) {
+	ips, err := net.LookupHost(username + ".taxitorrent.local")
+	if err != nil {
+		return "", err
+	}
+	return ips[0], err
+}
+
+func QueryIp(ip net.IP) (string, error) {
+	names, err := net.LookupAddr(ip.String())
+	if err != nil {
+		return "", err
+	}
+
+	if len(names) > 0 {
+		return names[0], err
+	}
+
+	return "", err
 }

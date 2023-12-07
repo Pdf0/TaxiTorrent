@@ -5,20 +5,21 @@ import (
 	"TaxiTorrent/util"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"reflect"
 )
 
 const (
-	SERVER_HOST = "localhost"
-	SERVER_PORT = "10000"
+	SERVER_HOST = "10.4.4.2" // servidor2
+	SERVER_PORT = "9090"
 	SERVER_TYPE = "tcp"
-	BLOCKSIZE   = 256
+	BLOCKSIZE   = 1024
 )
 
 func main() {
 
-	dataBase := make(map[string][]Protocols.Seeder)
+	dataBase := make(map[string]*Protocols.FileInfo)
 
 	fmt.Println("Server Running...")
 	server, err := net.Listen(SERVER_TYPE, SERVER_HOST+":"+SERVER_PORT)
@@ -36,15 +37,17 @@ func main() {
 		if err != nil {
 			fmt.Println("Error accepting: ", err.Error())
 		}
-		go processClient(connection, dataBase)
+		go processClient(connection, &dataBase)
 	}
 }
 
-func processClient(connection net.Conn, dataBase map[string][]Protocols.Seeder) {
+func processClient(connection net.Conn, dataBase *map[string]*Protocols.FileInfo) {
 	defer connection.Close()
 	ip, port := util.GetTCPRemoteAddr(connection)
 	fullAddr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
 	fmt.Println("Node connected (" + fullAddr + ")")
+
+	username := Protocols.QueryIp(ip)
 
 	for {
 		buffer := make([]byte, 1024)
@@ -74,9 +77,9 @@ func processClient(connection net.Conn, dataBase map[string][]Protocols.Seeder) 
 				fmt.Println("Error decoding SYN packet:", err.Error())
 				continue
 			}
-			InsertNodeInDataBase(dataBase, s.FileList, s.Ip, s.Port)
+			InsertNodeInDataBase(dataBase, s.FileList, s.Ip, s.Port, s.Username)
 			fmt.Println("Received: ", *s)
-			fmt.Println(dataBase)
+			fmt.Println(*dataBase)
 
 		case "update":
 			u := new(Protocols.Update)
@@ -84,14 +87,14 @@ func processClient(connection net.Conn, dataBase map[string][]Protocols.Seeder) 
 				fmt.Println("Error decoding Update packet:", err.Error())
 				continue
 			}
-			UpdateNode(dataBase, u.FileList, ip, port)
+			UpdateNode(dataBase, u.FileList, ip, port, username)
 			fmt.Println("Updated Node (" + fullAddr + ")")
 			fmt.Println(dataBase)
 
 		case "list":
 			fmt.Println("ListRequest from ", fullAddr)
 			var fileList []string
-			for fileName := range dataBase {
+			for fileName := range *dataBase {
 				fileList = append(fileList, fileName)
 			}
 			lResponse := Protocols.ListResponse{FileList: fileList}
@@ -108,49 +111,61 @@ func processClient(connection net.Conn, dataBase map[string][]Protocols.Seeder) 
 			}
 			fmt.Println("GetRequest from ", fullAddr, ": ", gRequest)
 			var seedersList []Protocols.Seeder
-			for fileName, seeders := range dataBase {
+			var fileSize uint64
+			for fileName, fileInfo := range *dataBase {
 				if fileName == gRequest.FileName {
-					seedersList = append(seedersList, seeders...)
+					seedersList = Protocols.DeepCopySeeders(fileInfo.SeedersInfo)
+					fileSize = fileInfo.FileSize
+					fmt.Println(fileInfo.SeedersInfo)
 				}
 			}
-			gResponse := Protocols.GetResponse{Seeders: seedersList}
+			gResponse := Protocols.GetResponse{Seeders: seedersList, Size: fileSize}
 			central := Protocols.Central{PacketType: "GetResponse", Payload: util.EncodeToBytes(gResponse)}
 			_, err := connection.Write(util.EncodeToBytes(central))
 			util.CheckErr(err)
 			fmt.Println("GetResponse to ", fullAddr, ": ", gResponse)
+		case "updateBlock":
+			bU := new(Protocols.BlockUpdate)
+			if err := util.DecodeToStruct(g.Payload, bU); err != nil {
+				fmt.Println("Error decoding Update packet:", err.Error())
+				continue
+			}
+			updateNodeBlock(dataBase, bU, ip, port)
+			fmt.Printf("Block %d received from node %s\n", bU.BlockId, ip.String())
 		}
 	}
 }
 
-func UpdateNode(dataBase map[string][]Protocols.Seeder, files []Protocols.File, ip net.IP, port uint) {
+func UpdateNode(dataBase *map[string]*Protocols.FileInfo, files []Protocols.File, ip net.IP, port uint, username string) {
 	DisconnectNode(dataBase, ip, port)
-	InsertNodeInDataBase(dataBase, files, ip, port)
+	InsertNodeInDataBase(dataBase, files, ip, port, username)
 }
 
-func DisconnectNode(dataBase map[string][]Protocols.Seeder, ip net.IP, port uint) {
-	for file, list := range dataBase {
-		dataBase[file] = RemoveNodeFromList(list, ip)
-		if len(dataBase[file]) == 0 {
-			delete(dataBase, file)
+func DisconnectNode(dataBase *map[string]*Protocols.FileInfo, ip net.IP, port uint) {
+	for file, fileInfo := range *dataBase {
+		(*dataBase)[file].SeedersInfo = RemoveNodeFromList(fileInfo.SeedersInfo, ip)
+		if len((*dataBase)[file].SeedersInfo) == 0 {
+			delete(*dataBase, file)
 		}
 	}
 }
 
-func InsertNodeInDataBase(dataBase map[string][]Protocols.Seeder, files []Protocols.File, ip net.IP, port uint) {
+func InsertNodeInDataBase(dataBase *map[string]*Protocols.FileInfo, files []Protocols.File, ip net.IP, port uint, username string) {
 	for _, file := range files {
 		node := Protocols.Seeder{
-			Ip:     ip,
-			Port:   port,
-			Blocks: file.Blocks,
+			Ip:              ip,
+			Username:        username,
+			Port:            port,
+			BlocksAvailable: file.Blocks,
 		}
-		if _, ok := dataBase[file.Name]; !ok {
-			dataBase[file.Name] = []Protocols.Seeder{}
-			dataBase[file.Name] = append(dataBase[file.Name], node)
+		if _, ok := (*dataBase)[file.Name]; !ok {
+			(*dataBase)[file.Name] = &Protocols.FileInfo{FileSize: uint64(file.Size), SeedersInfo: []Protocols.Seeder{node}}
 		} else {
-			if !Contains(dataBase[file.Name], node) {
-				dataBase[file.Name] = append(dataBase[file.Name], node)
+			if !Contains((*dataBase)[file.Name].SeedersInfo, node) {
+				(*dataBase)[file.Name].SeedersInfo = append((*dataBase)[file.Name].SeedersInfo, node)
 			}
 		}
+		fmt.Println((*dataBase)[file.Name])
 	}
 }
 
@@ -168,7 +183,7 @@ func AreSeedersEqual(s1 Protocols.Seeder, s2 Protocols.Seeder) bool {
 		return false
 	} else if !(s1.Port == s2.Port) {
 		return false
-	} else if !reflect.DeepEqual(s1.Blocks, s2.Blocks) {
+	} else if !reflect.DeepEqual(s1.BlocksAvailable, s2.BlocksAvailable) {
 		return false
 	}
 	return true
@@ -182,4 +197,23 @@ func RemoveNodeFromList(list []Protocols.Seeder, ip net.IP) []Protocols.Seeder {
 		}
 	}
 	return updatedList
+}
+
+func updateNodeBlock(dataBase *map[string]*Protocols.FileInfo, bU *Protocols.BlockUpdate, ip net.IP, port uint) {
+	nodeFound := false
+	for _, v := range (*dataBase)[bU.Filename].SeedersInfo {
+		if v.Ip.Equal(ip) {
+			v.BlocksAvailable[bU.BlockId] = true
+		}
+	}
+	if !nodeFound {
+		blocksBF := make([]bool, int(math.Ceil(float64((*dataBase)[bU.Filename].FileSize)/float64(BLOCKSIZE))))
+		blocksBF[bU.BlockId] = true
+		node := Protocols.Seeder{
+			Ip:              ip,
+			Port:            port,
+			BlocksAvailable: blocksBF,
+		}
+		(*dataBase)[bU.Filename].SeedersInfo = append((*dataBase)[bU.Filename].SeedersInfo, node)
+	}
 }
