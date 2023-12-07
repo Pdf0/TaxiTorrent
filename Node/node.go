@@ -260,17 +260,19 @@ func Listen(dataBase *map[string]Connection) {
 		fmt.Println("Received packet from", clientAddr.String())
 		if bytes.Equal(util.HashBlockMD5(packet), receivedChecksum) {
 			fmt.Println("Packet intact")
-			go handleUDPpacket(Protocols.UDPConnectionInfo{LocalAddr: *serverAddr, RemoteAddr: *clientAddr}, packet, n, dataBase)
+			ch := make(chan byte, 1)
+			go handleUDPpacket(Protocols.UDPConnectionInfo{LocalAddr: *serverAddr, RemoteAddr: *clientAddr}, packet, n, dataBase, ch)
+			<-ch
 		} else {
 			fmt.Println("Packet corrupted")
 		}
+
 	}
 }
 
-func handleUDPpacket(connInfo Protocols.UDPConnectionInfo, packet []byte, packetSize int, dataBase *map[string]Connection) {
+func handleUDPpacket(connInfo Protocols.UDPConnectionInfo, packet []byte, packetSize int, dataBase *map[string]Connection, ch chan byte) {
 	t := new(Protocols.TaxiProtocol)
 	util.DecodeToStruct(packet, t)
-	fmt.Println("BLOCK ID:", t.Id)
 	// Syn
 	if t.Id == 0 {
 
@@ -322,6 +324,7 @@ func handleUDPpacket(connInfo Protocols.UDPConnectionInfo, packet []byte, packet
 	} else {
 		fmt.Println("Invalid TaxiProtocol ID")
 	}
+	ch <- 1
 }
 
 func createAck(connInfo Protocols.UDPConnectionInfo) Protocols.TaxiProtocol {
@@ -462,7 +465,7 @@ func createDataPacket(file string, blockId int) Protocols.Data {
 	return Protocols.Data{
 		Filename: file,
 		BlockId:  blockId,
-		Block:    buffer,
+		Block:    buffer[:n],
 		Hash:     hash,
 	}
 }
@@ -520,7 +523,7 @@ func updateDataBaseBF(dataBase *map[string]Connection, nodeIp string, blockId in
 }
 
 func verifyBlockHashString(block []byte, hashedBlock string) bool {
-	return hashedBlock == util.HashBlockMD5String(block)
+	return strings.Compare(hashedBlock, util.HashBlockMD5String(block)) == 0
 }
 
 func verifyBlockHash(data []byte, receivedChecksum []byte) bool {
