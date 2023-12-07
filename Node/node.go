@@ -53,7 +53,6 @@ var closeOnce sync.Once
 
 func main() {
 
-	CLIENT_HOST = getPublicIP()
 	dataBase := createDataBase()
 
 	if len(os.Args) == 3 {
@@ -64,6 +63,8 @@ func main() {
 			SEEDSDIR = os.Args[1]
 			USERNAME = os.Args[2]
 
+      CLIENT_HOST, _ = Protocols.QueryUsername(USERNAME)
+      
 			trackerConn = connectToTracker()
 			defer trackerConn.Close()
 
