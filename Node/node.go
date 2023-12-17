@@ -63,8 +63,8 @@ func main() {
 			SEEDSDIR = os.Args[1]
 			USERNAME = os.Args[2]
 
-      CLIENT_HOST, _ = Protocols.QueryUsername(USERNAME)
-      
+			CLIENT_HOST, _ = Protocols.QueryUsername(USERNAME)
+
 			trackerConn = connectToTracker()
 			defer trackerConn.Close()
 
@@ -348,13 +348,13 @@ func sendInitialSynPackets(gResponse *Protocols.GetResponse, fileName string, da
 	var wg sync.WaitGroup
 	for _, node := range gResponse.Seeders {
 		wg.Add(1)
-		go makeHandshake(node, fileName, gResponse.Size, blocksPerNode, blocksOffset, dataBase, &wg)
+		go makeHandshake(node, fileName, gResponse.Size, blocksPerNode, blocksOffset, totalBlocks, dataBase, &wg)
 		blocksOffset = blocksOffset + blocksPerNode
 	}
 	wg.Wait()
 }
 
-func makeHandshake(node Protocols.Seeder, fileName string, fileSize uint64, nBlocks int, blocksOffset int, dataBase *map[string]Connection, wg *sync.WaitGroup) {
+func makeHandshake(node Protocols.Seeder, fileName string, fileSize uint64, nBlocks int, blocksOffset int, totalBlocks int, dataBase *map[string]Connection, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 	udpAddr, _ := net.ResolveUDPAddr("udp", node.Ip.String()+":"+CLIENT_UDPPORT)
@@ -369,7 +369,7 @@ func makeHandshake(node Protocols.Seeder, fileName string, fileSize uint64, nBlo
 	retries := 3
 	ackReceivedFlag := false
 
-	newBlockLocks := NewBlockLocks(nBlocks)
+	newBlockLocks := NewBlockLocks(totalBlocks)
 
 retryloop:
 	for i := 0; i < retries; i++ {
@@ -389,6 +389,7 @@ retryloop:
 		return
 	}
 	blocksToDownload := util.CreateBitFieldFromTo(&node.BlocksAvailable, blocksOffset, blocksOffset+nBlocks)
+	fmt.Println(blocksToDownload)
 	(*dataBase)[node.Ip.String()] = Connection{
 		udpconn,
 		fileName,
@@ -494,7 +495,6 @@ func sendPacketOverUDP(addr net.UDPAddr, data []byte) error {
 }
 
 func writeDataToFile(data *Protocols.Data, blockLocks *BlockLocks) {
-	fmt.Printf("[BLOCK %d]writeDataToFile: Entered\n", data.BlockId)
 	downloadPath := fmt.Sprintf("%s/%s", SEEDSDIR, data.Filename)
 
 	file, err := os.OpenFile(downloadPath, os.O_RDWR|os.O_CREATE, 0755)
@@ -503,7 +503,6 @@ func writeDataToFile(data *Protocols.Data, blockLocks *BlockLocks) {
 		return
 	}
 	defer file.Close()
-
 	blockLocks.Lock(data.BlockId)
 	defer blockLocks.Unlock(data.BlockId)
 
@@ -512,15 +511,12 @@ func writeDataToFile(data *Protocols.Data, blockLocks *BlockLocks) {
 		fmt.Println("Error writing block to file:", err)
 		return
 	}
-	fmt.Printf("[BLOCK %d]writeDataToFile: Entered\n", data.BlockId)
 }
 
 func updateDataBaseBF(dataBase *map[string]Connection, nodeIp string, blockId int) {
-	fmt.Printf("[BLOCK %d]updateDataBaseBF: Entered\n", blockId)
 	dataBaseMutex.Lock()
 	defer dataBaseMutex.Unlock()
 	(*dataBase)[nodeIp].BlocksToDownload[blockId] = false
-	fmt.Printf("[BLOCK %d]updateDataBaseBF: Exited\n", blockId)
 }
 
 func verifyBlockHashString(block []byte, hashedBlock string) bool {
@@ -542,7 +538,6 @@ func blocksRemainingFromNode(dataBase *map[string]Connection, nodeIp string) boo
 }
 
 func updateTracker(fileName string, blockId int) {
-	fmt.Printf("[BLOCK %d]updateTracker: Entered\n", blockId)
 
 	trackerConnMutex.Lock()
 	defer trackerConnMutex.Unlock()
@@ -554,8 +549,6 @@ func updateTracker(fileName string, blockId int) {
 	if err != nil {
 		fmt.Println("Error updating tracker:", err)
 	}
-
-	fmt.Printf("[BLOCK %d]updateTracker: Exited\n", blockId)
 }
 
 func createFile(fileName string, fileSize uint64) {
@@ -594,8 +587,5 @@ func sendFinish(connInfo Protocols.UDPConnectionInfo) {
 }
 
 func checkIfHasBlock(dataBase *map[string]Connection, data *Protocols.Data, connInfo Protocols.UDPConnectionInfo) bool {
-	if !(*dataBase)[connInfo.RemoteAddr.IP.String()].BlocksToDownload[data.BlockId] {
-		return true
-	}
-	return false
+	return !(*dataBase)[connInfo.RemoteAddr.IP.String()].BlocksToDownload[data.BlockId]
 }

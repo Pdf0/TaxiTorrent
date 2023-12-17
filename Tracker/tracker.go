@@ -47,7 +47,7 @@ func processClient(connection net.Conn, dataBase *map[string]*Protocols.FileInfo
 	fullAddr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
 	fmt.Println("Node connected (" + fullAddr + ")")
 
-	username := Protocols.QueryIp(ip)
+	username, _ := Protocols.QueryIp(ip)
 
 	for {
 		buffer := make([]byte, 1024)

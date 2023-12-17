@@ -88,8 +88,8 @@ func DirExists(path string) bool {
 }
 
 func CreateBitFieldFromTo(bitField *[]bool, from int, to int) []bool {
-	for i := 0; i <= len(*bitField); i++ {
-		if from > i && i <= to {
+	for i := 0; i < len(*bitField); i++ {
+		if i < from || i >= to {
 			(*bitField)[i] = false
 		}
 	}
